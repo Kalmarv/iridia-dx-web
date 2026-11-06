@@ -14,10 +14,10 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-d3d9-reader = "0.6.0"
-dxbc-reader = "0.6.0"
-dxcontainer = "0.6.0"
-dxil-reader = "0.6.0"
+d3d9-reader = "0.7.0"
+dxbc-reader = "0.7.0"
+dxcontainer = "0.7.0"
+dxil-reader = "0.7.0"
 # iridia's crates from one commit of its main branch: move the rev of all of them together
 iridia = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
 iridia-d3d9-ir = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
