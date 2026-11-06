@@ -19,15 +19,15 @@ dxbc-reader = "0.8.0"
 dxcontainer = "0.8.0"
 dxil-reader = "0.8.0"
 # iridia's crates from one commit of its main branch: move the rev of all of them together
-iridia = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
-iridia-d3d9-ir = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
-iridia-dxbc = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
-iridia-dxil = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
-iridia-exec = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
-iridia-exec-ir = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
-iridia-ir = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
-iridia-naga = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15", default-features = false, features = ["wgsl"] }
-iridia-passes = { git = "https://github.com/Kalmarv/iridia", rev = "054339acd3d2464d527fdd9eaf210b291034ff15" }
+iridia = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
+iridia-d3d9-ir = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
+iridia-dxbc = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
+iridia-dxil = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
+iridia-exec = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
+iridia-exec-ir = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
+iridia-ir = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
+iridia-naga = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f", default-features = false, features = ["wgsl"] }
+iridia-passes = { git = "https://github.com/Kalmarv/iridia", rev = "708f6d27e1e869d5abe0581ac750d97670c01b9f" }
 naga = { version = "30.0.1", package = "primase-naga", default-features = false, features = ["wgsl-out"] }
 # iridia-naga lowers the IR to naga as published; the naga path above uses the fork
 stock-naga = { version = "=30.0.1", package = "naga", default-features = false }

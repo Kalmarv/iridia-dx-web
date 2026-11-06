@@ -110,6 +110,12 @@ fn every_example_lifts_to_wgsl() {
                 "{name}: {code:?}"
             );
         }
+        // Direct3D 9 and DXBC programs are on the IR, run by its interpreter and by iridia-exec compiled from it,
+        // but for a compute program, which iridia-naga does not write yet
+        if report.format != Format::Dxil && !compute {
+            assert_eq!(report.path, "ir", "{name}");
+            assert_eq!(report.executors, ["iridia-exec-ir", "iridia-exec"], "{name}");
+        }
         // the IR's lines are tied to the source instructions they came from
         if report.path == "ir" {
             assert!(!report.lifted.unwrap().origins.is_empty(), "{name}");
@@ -258,4 +264,130 @@ fn the_plasma_colours_default_to_its_palette() {
     };
     assert_eq!(rgb("colorA"), [0xd1, 0xd5, 0xff]);
     assert_eq!(rgb("colorB"), [0x68, 0xd3, 0xee]);
+}
+
+/// The CPU executors on each example on the IR, on a quad of inputs spread over [-1, 1] with the constants' defaults (0.5
+/// where a word has none) and a
+/// gradient in each texture slot: `iridia-exec-ir` (the IR's interpreter), `iridia-exec` (compiled from the IR) and,
+/// for DXBC, `iridia-exec` on the old lift give the same bits (any NaN for a NaN), and the outputs vary by lane, so
+/// that agreement is not that of constant results.
+#[test]
+fn the_cpu_executors_agree_on_every_example_on_the_ir() {
+    let mut checked = 0;
+    for path in compiled() {
+        let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+        let bytes = std::fs::read(&path).unwrap();
+        let mut shader = open(&path);
+        let report = shader.report();
+        if report.path != "ir" {
+            continue;
+        }
+        let interface = report.interface.as_ref().unwrap();
+        let quad = report.needs_quad || interface.stage == iridia_ir::interface::Stage::Pixel;
+        let lanes: Vec<serde_json::Value> = (0..if quad { 4 } else { 1 })
+            .map(|l| {
+                let inputs: Vec<[u32; 4]> = (0..interface.inputs.len())
+                    .map(|k| {
+                        std::array::from_fn(|c| {
+                            (((l * 37 + k * 11 + c * 7) % 19) as f32 / 9.0 - 1.0).to_bits()
+                        })
+                    })
+                    .collect();
+                serde_json::json!({ "inputs": inputs })
+            })
+            .collect();
+        let buffers: Vec<(u32, Vec<u32>)> = interface
+            .resources
+            .iter()
+            .filter_map(|r| match &r.kind {
+                iridia_ir::interface::ResourceKind::ConstantBuffer { layout } => {
+                    let mut words = vec![0.5f32.to_bits(); layout.size.div_ceil(4) as usize];
+                    for c in &layout.constants {
+                        for (i, w) in c.default.iter().flat_map(|d| d.as_chunks::<4>().0).enumerate() {
+                            if let Some(slot) = words.get_mut(c.offset as usize / 4 + i) {
+                                *slot = u32::from_le_bytes(*w);
+                            }
+                        }
+                    }
+                    Some((r.id.0, words))
+                }
+                _ => None,
+            })
+            .collect();
+        let request: iridia_web::view::Request =
+            serde_json::from_value(serde_json::json!({ "lanes": lanes, "buffers": buffers })).unwrap();
+        let gradient: Vec<u8> = (0..16u8)
+            .flat_map(|i| [i * 16, 255 - i * 16, i * 8, 255])
+            .collect();
+        let mut textures = iridia_web::sampling::Textures::default();
+        for register in 0..4 {
+            shader.set_texture(register, 4, 4, gradient.clone(), false);
+            textures.set(
+                register,
+                iridia_web::sampling::Image {
+                    width: 4,
+                    height: 4,
+                    texels: gradient.clone(),
+                    signed: false,
+                },
+            );
+        }
+        let mut runs = shader.executions(&request);
+        if report.format == Format::Dxbc {
+            runs.push(
+                iridia_web::legacy::NagaProgram::dxbc(&bytes)
+                    .unwrap()
+                    .execute(&request, &textures),
+            );
+        }
+        let results: Vec<(String, Vec<iridia_web::view::LaneResult>)> = runs
+            .into_iter()
+            .map(|r| {
+                (
+                    r.executor.to_owned(),
+                    r.lanes.unwrap_or_else(|e| panic!("{name}: {}: {e}", r.executor)),
+                )
+            })
+            .collect();
+        assert_eq!(
+            results.len(),
+            if report.format == Format::Dxbc { 3 } else { 2 },
+            "{name}"
+        );
+        let words = |lanes: &[iridia_web::view::LaneResult]| -> Vec<Option<[u32; 4]>> {
+            lanes.iter().flat_map(|l| l.outputs.iter().copied()).collect()
+        };
+        let nan = |w: u32| f32::from_bits(w).is_nan();
+        let (first, reference) = (&results[0].0, words(&results[0].1));
+        for (executor, lanes) in &results[1..] {
+            let these = words(lanes);
+            assert_eq!(these.len(), reference.len(), "{name}: {executor}");
+            for (a, b) in reference.iter().zip(&these) {
+                let same = match (a, b) {
+                    (Some(a), Some(b)) => a.iter().zip(b).all(|(x, y)| x == y || (nan(*x) && nan(*y))),
+                    (None, None) => true,
+                    _ => false,
+                };
+                assert!(
+                    same,
+                    "{name}: {first} gives {a:?}, {executor} {b:?}\n{first}: {reference:?}\n{executor}: {these:?}\noutputs: {:?}",
+                    interface
+                        .outputs
+                        .iter()
+                        .map(|o| (o.label.name.clone(), o.label.index, o.provenance.d3d))
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+        if quad {
+            let lane = |l: usize| results[0].1[l].outputs.clone();
+            assert!(
+                (1..4).any(|l| lane(l) != lane(0)),
+                "{name}: every lane gives the same outputs"
+            );
+        }
+        checked += 1;
+    }
+    // plasma, lit-brick, bloom, the pair's two programs, toon, water
+    assert_eq!(checked, 7);
 }

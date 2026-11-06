@@ -1,14 +1,14 @@
-//! The old path: everything the page shows for DXBC and DXIL until their readers lift onto the IR, in one place.
+//! The old path, in one place: what the page does not have on the IR yet.
 //!
-//! DXBC and DXIL lift into naga modules (`iridia-dxbc`, `iridia-dxil`); the analyses (what reaches each output lane,
-//! how a constant buffer holds a matrix), the specialisation of constant words and the `iridia-exec` executor work on
-//! those modules. Direct3D 9 is on the IR alone. When the DXBC and DXIL readers move onto the IR this module is
-//! deleted, and `ir` takes what it did: `tests/legacy.rs` fails once it is gone, as a reminder to make that test the
-//! check that it stays gone.
+//! DXBC and DXIL lift into naga modules here (`iridia-dxbc`, `iridia-dxil`). For DXBC the IR lift is the program shown
+//! and run, and this module gives only the analyses (what reaches each output lane, how a constant buffer holds a
+//! matrix) and the specialisation of constant words; for DXIL and a DXBC compute program it gives everything, the
+//! `iridia-exec` run of the module included. When the IR has its own analyses and constant folding and DXIL lifts onto
+//! it, this module is deleted: `tests/legacy.rs` fails once it is gone, as a reminder to make that test the check that
+//! it stays gone.
 
 use iridia::flow::{Flow, Via};
 use iridia::{ConstantType, IoType, Program, ResourceId, ResourceKind, Stage};
-use iridia_exec::PixelShader;
 use serde::Serialize;
 
 use crate::sampling::Textures;
@@ -318,86 +318,14 @@ impl NagaProgram {
     }
 
     fn run(&self, request: &Request, textures: &Textures) -> Result<Vec<LaneResult>, String> {
-        let interface = &self.program.interface;
         let shader = iridia_exec::ProgramShader::new(self.program.clone()).map_err(|e| e.to_string())?;
-        // the register view: each interface input's lanes placed in its D3D register's lanes
-        let registers = |inputs: &[[u32; 4]]| -> Vec<[u32; 4]> {
-            let mut out = vec![[0u32; 4]; shader.input_count()];
-            for (v, value) in interface.inputs.iter().zip(inputs) {
-                let Some(d3d) = v.provenance.d3d else { continue };
-                let Some(register) = out.get_mut(d3d.register as usize) else {
-                    continue;
-                };
-                let lanes = (0..4u8).filter(|l| d3d.mask >> l & 1 != 0);
-                for (k, lane) in lanes.enumerate() {
-                    if let (Some(slot), Some(word)) = (register.get_mut(usize::from(lane)), value.get(k)) {
-                        *slot = *word;
-                    }
-                }
-            }
-            out
-        };
-        // constant buffers by bind slot: the D3D register of each resource the request gives
-        let rows: Vec<(u32, Vec<[u32; 4]>)> = request
-            .buffers
-            .iter()
-            .filter_map(|(r, words)| {
-                let d3d = interface.resource(ResourceId(*r))?.provenance.d3d?;
-                Some((d3d.register, view::rows(words)))
-            })
-            .collect();
-        let buffers: Vec<(u32, &[[u32; 4]])> = rows.iter().map(|(s, w)| (*s, w.as_slice())).collect();
-        let mut sampler = |s: iridia_exec::Sample| -> Result<[f32; 4], String> {
-            if s.layer.is_some() {
-                return Err("the page's CPU sampler reads 2D textures only, not arrays".to_owned());
-            }
-            textures.sample(s.texture, s.uv)
-        };
-        let outputs = |e: &iridia_exec::Execution| -> LaneResult {
-            let outputs = interface
-                .outputs
-                .iter()
-                .map(|v| {
-                    let d3d = v.provenance.d3d?;
-                    let register = e.outputs.get(d3d.register as usize)?;
-                    let mut value = [0u32; 4];
-                    let lanes = (0..4u8).filter(|l| d3d.mask >> l & 1 != 0);
-                    for (slot, lane) in value.iter_mut().zip(lanes) {
-                        *slot = register.get(usize::from(lane)).copied().unwrap_or(0);
-                    }
-                    Some(value)
-                })
-                .collect();
-            LaneResult {
-                outputs,
-                killed: e.discarded,
-            }
-        };
-        let inputs: Vec<Vec<[u32; 4]>> = request.lanes.iter().map(|l| registers(&l.inputs)).collect();
-        match inputs.as_slice() {
-            [one] if self.program.stage == Stage::Vertex => {
-                let (e, _) = shader
-                    .execute_vertex(one, &buffers, &mut sampler)
-                    .map_err(|e| e.to_string())?;
-                Ok(vec![outputs(&e)])
-            }
-            [one] => {
-                let e = shader
-                    .execute(one, &buffers, &mut sampler)
-                    .map_err(|e| e.to_string())?;
-                Ok(vec![outputs(&e)])
-            }
-            [a, b, c, d] => {
-                let runs = shader
-                    .execute_quad([a, b, c, d], &buffers, &mut sampler)
-                    .map_err(|e| e.to_string())?;
-                Ok(runs.iter().map(outputs).collect())
-            }
-            _ => Err(format!(
-                "a run takes one invocation or a quad of four, not {}",
-                inputs.len()
-            )),
-        }
+        crate::exec::run(
+            &shader,
+            &self.program.interface,
+            self.program.stage,
+            request,
+            textures,
+        )
     }
 
     /// Whether `iridia-exec` runs the program: it runs pixel and vertex programs.

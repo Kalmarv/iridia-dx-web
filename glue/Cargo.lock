@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 name = "iridia"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "iridia-interface",
  "iridia-ir",
@@ -255,7 +255,7 @@ dependencies = [
 [[package]]
 name = "iridia-d3d9-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "d3d9-reader 0.5.2",
  "iridia-ir",
@@ -264,18 +264,19 @@ dependencies = [
 [[package]]
 name = "iridia-dxbc"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "dxbc-reader 0.5.2",
  "dxcontainer 0.5.2",
  "iridia",
+ "iridia-ir",
  "primase-naga",
 ]
 
 [[package]]
 name = "iridia-dxil"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "dxcontainer 0.5.2",
  "dxil-reader 0.5.2",
@@ -287,11 +288,13 @@ dependencies = [
 [[package]]
 name = "iridia-exec"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "half",
  "iridia",
+ "iridia-exec-ir",
  "iridia-interface",
+ "iridia-ir",
  "primase-foundations",
  "primase-naga",
  "thiserror",
@@ -300,7 +303,7 @@ dependencies = [
 [[package]]
 name = "iridia-exec-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "iridia-ir",
 ]
@@ -308,7 +311,7 @@ dependencies = [
 [[package]]
 name = "iridia-interface"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "iridia-ir",
  "serde",
@@ -317,7 +320,7 @@ dependencies = [
 [[package]]
 name = "iridia-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "serde",
  "serde_json",
@@ -327,7 +330,7 @@ dependencies = [
 [[package]]
 name = "iridia-naga"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "iridia-ir",
  "naga",
@@ -336,7 +339,7 @@ dependencies = [
 [[package]]
 name = "iridia-passes"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=054339acd3d2464d527fdd9eaf210b291034ff15#054339acd3d2464d527fdd9eaf210b291034ff15"
+source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
 dependencies = [
  "iridia-ir",
 ]

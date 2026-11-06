@@ -1,8 +1,7 @@
 //! iridia's public pipeline on its own IR: read and lift, specialise pipeline state, promote and simplify, validate,
-//! write WGSL through stock naga, and run on the CPU with `iridia-exec-ir`.
+//! write WGSL through stock naga, and run on the CPU with `iridia-exec-ir` and, compiled, with `iridia-exec`.
 //!
-//! Direct3D 9 programs take this path today; the other readers join it when they lift into the IR, and the page then
-//! routes them here (see `legacy`).
+//! Direct3D 9 and DXBC programs take this path; DXIL joins it when its reader lifts into the IR (see `legacy`).
 
 use iridia_ir::interface::{Interface, ResourceId, ResourceKind};
 
@@ -24,6 +23,15 @@ impl IrProgram {
         Ok(IrProgram {
             lifted: iridia_d3d9_ir::lift(bytes)?,
             code_base: 0,
+        })
+    }
+
+    /// Lift a DXBC container's program; `code_base` is the file byte where its code part's data starts, which the
+    /// lift's word offsets count from.
+    pub fn dxbc(bytes: &[u8], code_base: usize) -> Result<IrProgram, iridia_ir::Refusal> {
+        Ok(IrProgram {
+            lifted: iridia_dxbc::ir::lift(bytes)?,
+            code_base,
         })
     }
 
@@ -174,14 +182,55 @@ impl IrProgram {
         })
     }
 
-    /// Run the prepared program (`state` folded) for `request`, a quad where the program takes derivatives.
-    pub fn execute(&self, request: &Request, textures: &Textures) -> Executed {
-        let lanes = self.run(request, textures);
-        Executed {
-            executor: "iridia-exec-ir",
-            runs: "the IR program, by the IR's own definitions",
-            lanes,
+    /// The CPU executors that run the program with `state` folded: `iridia-exec-ir` always, and `iridia-exec` where
+    /// it compiles the program (a pixel or vertex program).
+    pub fn executors(&self, state: &[(ResourceId, [u64; 4])]) -> Vec<&'static str> {
+        let mut out = vec!["iridia-exec-ir"];
+        if self.prepared(state).is_ok_and(|p| self.compiled(&p).is_ok()) {
+            out.push("iridia-exec");
         }
+        out
+    }
+
+    /// Run the prepared program (`state` folded) for `request` on each executor, a quad where the program takes
+    /// derivatives.
+    pub fn execute(&self, request: &Request, textures: &Textures) -> Vec<Executed> {
+        let known: Vec<(ResourceId, [u64; 4])> = request
+            .state
+            .iter()
+            .map(|(r, lanes)| (ResourceId(*r), lanes.map(u64::from)))
+            .collect();
+        let mut out = vec![Executed {
+            executor: "iridia-exec-ir",
+            runs: "the IR program, interpreted",
+            lanes: self.run(request, textures),
+        }];
+        if self.executors(&known).contains(&"iridia-exec") {
+            out.push(Executed {
+                executor: "iridia-exec",
+                runs: "the IR program, compiled",
+                lanes: self.run_compiled(request, textures),
+            });
+        }
+        out
+    }
+
+    /// `p` compiled by `iridia-exec`, its exits as `break_flags` leaves them.
+    fn compiled(&self, p: &iridia_ir::Program) -> Result<iridia_exec::ProgramShader, String> {
+        let mut p = p.clone();
+        iridia_passes::break_flags(&mut p.entry).map_err(|e| format!("break_flags: {e}"))?;
+        iridia_exec::ProgramShader::from_ir(p).map_err(|e| e.to_string())
+    }
+
+    fn run_compiled(&self, request: &Request, textures: &Textures) -> Result<Vec<LaneResult>, String> {
+        let known: Vec<(ResourceId, [u64; 4])> = request
+            .state
+            .iter()
+            .map(|(r, lanes)| (ResourceId(*r), lanes.map(u64::from)))
+            .collect();
+        let p = self.prepared(&known)?;
+        let shader = self.compiled(&p)?;
+        crate::exec::run(&shader, &p.interface, p.stage, request, textures)
     }
 
     fn run(&self, request: &Request, textures: &Textures) -> Result<Vec<LaneResult>, String> {

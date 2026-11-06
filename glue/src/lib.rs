@@ -1,13 +1,14 @@
 //! The wasm glue of iridia's web demo: what the page asks of a dropped shader, answered with iridia's and dx's
 //! public crates and handed back as JSON.
 //!
-//! A [`Shader`] holds the file's bytes and its lifts. Direct3D 9 programs take iridia's IR pipeline ([`ir`]); DXBC and
-//! DXIL take the naga-module crates until their readers lift into the IR ([`legacy`], which also gives the analyses,
-//! the constant-word specialisation and the `iridia-exec` runs the IR does not have yet). The bytes, listing and
-//! regions come from dx ([`container`]).
+//! A [`Shader`] holds the file's bytes and its lifts. Direct3D 9 and DXBC programs take iridia's IR pipeline ([`ir`]):
+//! the lift, its WGSL and the CPU runs. DXIL takes the naga-module crates until its reader lifts into the IR
+//! ([`legacy`]), which also gives every program the analyses and the constant-word specialisation the IR does not
+//! have yet. The bytes, listing and regions come from dx ([`container`]).
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
 
 pub mod container;
+pub mod exec;
 pub mod ir;
 pub mod legacy;
 pub mod sampling;
@@ -108,7 +109,16 @@ impl Shader {
         let format = Format::of(&bytes)?;
         let (ir, naga) = match format {
             Format::D3d9 => (Some(IrProgram::d3d9(&bytes)), None),
-            Format::Dxbc => (None, Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string()))),
+            // the IR lift is the program shown and run, and the old one gives the analyses and the constant folding;
+            // a compute program stays on the old path until iridia-naga writes WGSL for compute IR
+            Format::Dxbc => {
+                let ir = IrProgram::dxbc(&bytes, container::bytecode(&bytes, format).code_base);
+                let naga = Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string()));
+                match &ir {
+                    Ok(p) if p.interface().stage == Stage::Compute => (None, naga),
+                    _ => (Some(ir), naga),
+                }
+            }
             Format::Dxil => (None, Some(NagaProgram::dxil(&bytes).map_err(|r| r.to_string()))),
         };
         Ok(Shader {
@@ -160,13 +170,11 @@ impl Shader {
             Some(Err(e)) => Err(e.clone()),
             None => Err("the analyses do not read IR programs".to_owned()),
         };
-        let mut executors = Vec::new();
-        if matches!(self.ir, Some(Ok(_))) {
-            executors.push("iridia-exec-ir");
-        }
-        if matches!(&self.naga, Some(Ok(n)) if n.runs()) {
-            executors.push("iridia-exec");
-        }
+        let executors = match (&self.ir, &self.naga) {
+            (Some(Ok(ir)), _) => ir.executors(&self.default_pins().known_state()),
+            (None, Some(Ok(n))) if n.runs() => vec!["iridia-exec"],
+            _ => Vec::new(),
+        };
         let needs_quad = match (&self.ir, &self.naga) {
             (Some(Ok(ir)), _) => ir.needs_quad(),
             (_, Some(Ok(n))) => n.needs_quad(),
@@ -269,9 +277,12 @@ impl Shader {
         }
     }
 
-    /// The program specialised by `pins` on each path that lifts it.
-    /// The program specialised by `pins` on the path it takes, or none where it did not lift.
+    /// The program specialised by `pins`, or none where it did not lift: on the old path where it lifts there, which
+    /// folds constant words, otherwise on the IR, which folds pipeline state.
     pub fn specialised(&self, pins: &Pins) -> Option<Result<Specialised, String>> {
+        if let Some(Ok(n)) = &self.naga {
+            return Some(n.specialise(pins));
+        }
         match &self.ir {
             Some(Ok(p)) => {
                 // the state the page does not pin keeps its default, so the program still has a WGSL form
@@ -284,17 +295,13 @@ impl Shader {
                 full.words.clone_from(&pins.words);
                 Some(p.specialise(&full, &self.default_pins()))
             }
-            Some(Err(_)) => None,
-            None => match &self.naga {
-                Some(Ok(n)) => Some(n.specialise(pins)),
-                _ => None,
-            },
+            _ => None,
         }
     }
 
-    /// This vertex program's WGSL written for `consumer`, the pixel program it feeds, on the path both programs take
-    /// (a Direct3D 9 pair on the IR, a DXBC or DXIL pair on the naga path), against the WGSL the consumer's report
-    /// shows: its outputs where the consumer reads them, its resources after the consumer's in each bind group.
+    /// This vertex program's WGSL written for `consumer`, the pixel program it feeds, against the WGSL the consumer's
+    /// report shows: its outputs where the consumer reads them, its resources after the consumer's in each bind group.
+    /// Each program is written on the path its report shows (the IR where it lifts there).
     pub fn linked(&self, consumer: &Shader) -> Result<Linked, String> {
         let stages = (self.stage(), consumer.stage());
         if !matches!(stages, (Some(Stage::Vertex), Some(Stage::Pixel))) {
@@ -304,21 +311,34 @@ impl Shader {
                 stage_name(stages.1)
             ));
         }
-        match (&self.ir, &consumer.ir, &self.naga, &consumer.naga) {
-            (Some(Ok(vs)), Some(Ok(ps)), _, _) => {
-                let shown = ps.prepared(&consumer.default_pins().known_state())?;
-                let taken = ps.wgsl(&shown)?.bindings;
-                let p = vs.prepared(&self.default_pins().known_state())?;
-                vs.linked(&p, &shown.interface, &taken)
-            }
-            (None, None, Some(Ok(vs)), Some(Ok(ps))) => vs.linked(ps.interface(), &ps.wgsl()?.bindings),
-            (Some(Err(r)), ..) | (_, Some(Err(r)), ..) => Err(format!("a program of the pair did not lift: {r}")),
-            (_, _, Some(Err(e)), _) | (_, _, _, Some(Err(e))) => Err(format!("a program of the pair did not lift: {e}")),
-            _ => Err(
+        if (self.format == Format::D3d9) != (consumer.format == Format::D3d9) {
+            return Err(
                 "Direct3D links a vertex program to a pixel program of its own generation: a Direct3D 9 program \
                  feeds a Direct3D 9 program, a Shader Model 4 to 6 program one of those"
                     .to_owned(),
-            ),
+            );
+        }
+        // the consumer as its report shows it: its interface and the bindings of its WGSL
+        let (read, taken) = match (&consumer.ir, &consumer.naga) {
+            (Some(Ok(ps)), _) => {
+                let shown = ps.prepared(&consumer.default_pins().known_state())?;
+                let taken = ps.wgsl(&shown)?.bindings;
+                (shown.interface, taken)
+            }
+            (None, Some(Ok(ps))) => (ps.interface().clone(), ps.wgsl()?.bindings),
+            (Some(Err(r)), _) => return Err(format!("a program of the pair did not lift: {r}")),
+            (None, Some(Err(e))) => return Err(format!("a program of the pair did not lift: {e}")),
+            (None, None) => return Err("the pixel program did not lift".to_owned()),
+        };
+        match (&self.ir, &self.naga) {
+            (Some(Ok(vs)), _) => {
+                let p = vs.prepared(&self.default_pins().known_state())?;
+                vs.linked(&p, &read, &taken)
+            }
+            (None, Some(Ok(vs))) => vs.linked(&read, &taken),
+            (Some(Err(r)), _) => Err(format!("a program of the pair did not lift: {r}")),
+            (None, Some(Err(e))) => Err(format!("a program of the pair did not lift: {e}")),
+            (None, None) => Err("the vertex program did not lift".to_owned()),
         }
     }
 
@@ -342,9 +362,8 @@ impl Shader {
                     request.state.push((s.resource, s.default));
                 }
             }
-            out.push(p.execute(&request, &self.textures));
-        }
-        if let Some(Ok(n)) = &self.naga
+            out.extend(p.execute(&request, &self.textures));
+        } else if let Some(Ok(n)) = &self.naga
             && n.runs()
         {
             out.push(n.execute(request, &self.textures));
