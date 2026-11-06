@@ -76,6 +76,8 @@ h1, h2, h3, h4 { line-height: 1.25; margin: 0 0 0.5em; font-weight: 650; letter-
 h1 { font-size: 22px; }
 h2 { font-size: 17px; margin-top: 1.4em; }
 h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2); margin-top: 1.2em; }
+h3.credit { display: flex; align-items: center; gap: 7px; }
+.credit-mark { height: 15px; width: auto; display: block; }
 h4 { font-size: 14px; margin-top: 1em; }
 p { margin: 0 0 0.8em; }
 .dim { color: var(--fg-3); }
