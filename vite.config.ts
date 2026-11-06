@@ -4,5 +4,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: './',
   build: { target: 'es2022', assetsInlineLimit: 0, chunkSizeWarningLimit: 4096 },
-  server: { host: '127.0.0.1' },
+  // docs/logo.svg is the favicon and the header's mark: the dev server may read it from outside web/
+  server: { host: '127.0.0.1', fs: { allow: ['.', '../docs/logo.svg'] } },
 });

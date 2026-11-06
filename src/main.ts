@@ -1,5 +1,7 @@
 // The page: a header, the routes (#/ the examples and the drop zone, #/example/<id>, #/file for a dropped file,
 // #/coverage), the drag-and-drop over the whole window and the glue's lazy load.
+// the mark the README shows: docs/logo.svg itself, so the two stay the same
+import logo from '../../docs/logo.svg?url';
 import './style.css';
 import { type Opened, Workspace, fetchExample } from './app';
 import { coverageView } from './coverage';
@@ -43,7 +45,7 @@ function themeButton(): HTMLElement {
 
 const header = h(
   'header.top',
-  h('a.brand', { href: '#/' }, h('span.logo', { 'aria-hidden': 'true' }), 'iridia'),
+  h('a.brand', { href: '#/' }, h('img.logo', { src: logo, alt: '', width: 22, height: 22 }), 'iridia'),
   h('p.tagline', 'iridia reads compiled Direct3D shaders and lifts them into programs other tools can read, write and run. Here it runs in your browser.'),
   h(
     'nav.links',
@@ -80,7 +82,7 @@ function home(): HTMLElement {
     h(
       'section.dropzone',
       { 'aria-label': 'open a shader' },
-      h('div.dropzone-art', { 'aria-hidden': 'true' }),
+      h('img.dropzone-art', { src: logo, alt: '', width: 220, height: 220 }),
       h('h1', 'Drop a compiled shader'),
       h('p', 'DXBC (Shader Model 4 and 5), DXIL (6.x) or a Direct3D 9 token stream (1.1 to 3.0): .cso, .fxo, .vso, .pso or a container. Drop a vertex and a pixel program together to link them.'),
       h('p', pick, h('span.dim', ' · nothing leaves your machine: it all runs here, in WebAssembly and WebGPU.')),

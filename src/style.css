@@ -109,7 +109,7 @@ input[type='color'] { width: 44px; height: 26px; padding: 0 2px; border: 1px sol
 .top { display: flex; align-items: center; gap: 18px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--bg-2); position: sticky; top: 0; z-index: 20; }
 .brand { font-weight: 750; font-size: 18px; color: var(--fg); display: flex; align-items: center; gap: 9px; letter-spacing: -0.02em; }
 .brand:hover { text-decoration: none; }
-.logo { width: 20px; height: 20px; background: conic-gradient(from 200deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent)); clip-path: polygon(50% 4%, 96% 92%, 4% 92%); }
+.logo { width: 22px; height: 22px; display: block; }
 .tagline { margin: 0; color: var(--fg-2); flex: 1; font-size: 13px; }
 .links { display: flex; align-items: center; gap: 14px; }
 .links a { color: var(--fg-2); }
@@ -129,7 +129,7 @@ body.dragging .drop-overlay { display: grid; }
 .dropzone { position: relative; border: 1.5px dashed var(--line); border-radius: 18px; padding: 44px 40px 36px; background: radial-gradient(1200px 300px at 10% 0%, var(--hl), transparent 60%), var(--bg-2); overflow: hidden; }
 .dropzone h1 { font-size: 30px; margin-bottom: 10px; }
 .dropzone p { max-width: 62ch; color: var(--fg-2); }
-.dropzone-art { position: absolute; right: 36px; top: 50%; translate: 0 -50%; width: 220px; height: 220px; opacity: 0.5; background: conic-gradient(from 90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent)); clip-path: polygon(50% 8%, 92% 88%, 8% 88%); filter: blur(0.5px); mask: radial-gradient(circle at 50% 60%, black 30%, transparent 70%); }
+.dropzone-art { position: absolute; right: 36px; top: 50%; translate: 0 -50%; width: 220px; height: 220px; opacity: 0.85; pointer-events: none; user-select: none; }
 body.dragging .dropzone { border-color: var(--accent); }
 .gallery { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .card { display: grid; align-content: start; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); color: var(--fg); height: 100%; transition: border-color 0.15s, transform 0.15s; }
@@ -326,7 +326,7 @@ td.ne { color: var(--bad); }
   .preview-col { position: static; max-height: none; }
   .preview-wrap { max-height: 60vh; }
   .tagline { display: none; }
-  .dropzone-art { opacity: 0.18; }
+  .dropzone-art { opacity: 0.25; }
 }
 @media (max-width: 760px) {
   main { padding: 12px; }
