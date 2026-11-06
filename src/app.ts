@@ -9,7 +9,7 @@ import { mesh as meshOf, MESHES, type Mesh } from './gpu/mesh';
 import { type Camera, type Program, Preview, type Scene } from './gpu/renderer';
 import { fromFile, guess, placeholder, type Pixels } from './gpu/textures';
 import { defaultFeed, type Feed, FEEDS } from './gpu/wgsl';
-import type { Executed, Io, Linked, Pins, Report, Request, Result, Specialisations, Wgsl } from './types';
+import type { Executed, Io, Linked, Pins, Report, Request, Result, Specialised, Wgsl } from './types';
 import { err, ok } from './types';
 import { bytecodeView } from './views/bytecode';
 import { codePane } from './views/code';
@@ -30,7 +30,7 @@ export interface Opened {
 interface Prog extends Opened {
   buffers: Buffer[];
   spec: SpecialiseState;
-  specialised: Specialisations | null;
+  specialised: Result<Specialised> | null;
   specError: string | null;
 }
 
@@ -166,7 +166,7 @@ export class Workspace {
         p.specialised = null;
         p.specError = r.Err;
       } else {
-        p.specialised = r as Specialisations;
+        p.specialised = r as Result<Specialised> | null;
         p.specError = null;
       }
     }
@@ -176,8 +176,7 @@ export class Workspace {
   private drawn(p: Prog): { text: string; note: string | null } | null {
     const base = ok(p.report.wgsl);
     if (!base) return null;
-    const s = p.specialised ? (p.report.path === 'ir' ? p.specialised.ir : p.specialised.naga) ?? (p.report.path === 'ir' ? null : p.specialised.naga) : null;
-    const spec = s ? ok(s) : undefined;
+    const spec = p.specialised ? ok(p.specialised) : undefined;
     const text = spec ? ok(spec.wgsl) : undefined;
     if (text) return { text, note: `drawing the program specialised by ${spec!.by}` };
     return { text: base.text, note: null };
@@ -189,7 +188,7 @@ export class Workspace {
     const p = this.primary;
     const r = p.report;
     const title = this.example?.title ?? this.progs.map((x) => x.name).join(' + ');
-    const facts = (x: Prog) => [x.report.target ?? x.report.format.toUpperCase(), x.report.format.toUpperCase(), plural(x.report.size, 'byte'), x.report.path === 'ir' ? 'IR path' : 'naga path'].filter((v, i, a) => a.indexOf(v) === i);
+    const facts = (x: Prog) => [x.report.target ?? x.report.format.toUpperCase(), x.report.format.toUpperCase(), plural(x.report.size, 'byte')].filter((v, i, a) => a.indexOf(v) === i);
     const switcher =
       this.progs.length > 1
         ? h(
@@ -458,9 +457,16 @@ export class Workspace {
     this.side.replaceChildren(...parts);
   }
 
+  /** The tabs shown: Flow only where a program has analyses (they do not read IR programs yet). */
+  private tabs(): Tab[] {
+    return TABS.filter((t) => t !== 'flow' || this.progs.some((p) => ok(p.report.analyses)));
+  }
+
   private renderTabs(): void {
+    const tabs = this.tabs();
+    if (!tabs.includes(this.tab)) this.tab = tabs.includes('lift') ? 'lift' : tabs[0];
     this.tabList.replaceChildren(
-      ...TABS.map((t) =>
+      ...tabs.map((t) =>
         h(
           'button.tab',
           {
@@ -472,10 +478,10 @@ export class Workspace {
             on: {
               click: () => this.selectTab(t),
               keydown: (e: KeyboardEvent) => {
-                const i = TABS.indexOf(this.tab);
+                const i = tabs.indexOf(this.tab);
                 if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                   e.preventDefault();
-                  const next = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length];
+                  const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
                   this.selectTab(next);
                   (this.tabList.querySelector(`#tab-${next}`) as HTMLElement | null)?.focus();
                 }
@@ -563,9 +569,10 @@ export class Workspace {
     const r = this.primary.report;
     if (r.refusal || !ok(r.wgsl)) {
       this.previewMessage.replaceChildren(h('div.error-box', h('strong', 'No preview: '), r.refusal?.message ?? err(r.wgsl) ?? 'no WGSL'));
+      this.state('failed');
       return;
     }
-    if ((this.example?.view ?? '') === 'none') return;
+    this.state('starting');
     this.previewMessage.replaceChildren(h('div.preview-loading', 'Starting WebGPU…'));
     const pv = await getPreview();
     if (!this.alive) return;
@@ -573,10 +580,19 @@ export class Workspace {
       this.previewMessage.replaceChildren(h('div.note-box', pv));
       this.el.querySelector('.toolbar')?.replaceWith(this.toolbar());
       this.renderTabs();
-      return;
+      return this.state('none');
     }
     this.render();
-    pv.onLost = (why) => this.previewMessage.replaceChildren(h('div.error-box', why));
+    pv.onLost = (why) => {
+      this.previewMessage.replaceChildren(h('div.error-box', why));
+      this.state('failed');
+    };
+    // the first error met while drawing stays shown: the frames after it repeat it
+    pv.onError = (message) => {
+      if (!this.alive || this.el.dataset.preview === 'failed') return;
+      this.previewMessage.replaceChildren(h('div.error-box', h('strong', 'WebGPU reported an error while drawing: '), message));
+      this.state('failed');
+    };
     this.bindTextures();
     this.attachPointer(pv);
     await this.rebuild();
@@ -649,15 +665,27 @@ export class Workspace {
     this.el.querySelector('.toolbar')?.replaceWith(this.toolbar());
     if (typeof scene === 'string') {
       this.previewMessage.replaceChildren(h('div.error-box', h('strong', 'No preview: '), scene));
-      return;
+      return this.state('failed');
     }
+    this.state('building');
     try {
-      await pv.show(scene);
+      // a later rebuild (a control changed again meanwhile) owns the message and the state
+      if (!(await pv.show(scene))) return;
       const note = this.drawn(this.primary)?.note;
       this.previewMessage.replaceChildren(note ? h('div.preview-note', note) : '');
+      this.state('ready');
     } catch (e) {
       this.previewMessage.replaceChildren(h('div.error-box', h('strong', 'WebGPU refused the program: '), e instanceof Error ? e.message : String(e)));
+      this.state('failed');
     }
+  }
+
+  /**
+   * The preview's state, on the workspace as `data-preview`: starting, building, ready (drawing), failed (an error is
+   * shown) or none (no preview: no WebGPU, or the example has none). The page's browser checks wait on it.
+   */
+  private state(s: 'starting' | 'building' | 'ready' | 'failed' | 'none'): void {
+    this.el.dataset.preview = s;
   }
 
   private camera(aspect: number): { camera: Camera; view: Float32Array; projection: Float32Array; world: Float32Array } {

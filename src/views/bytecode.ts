@@ -1,6 +1,6 @@
 // The bytes beside dx's listing: the file's regions (container parts, or a token stream's version, comments and code)
 // banded over a hex dump, and each listed instruction tied to its bytes both ways.
-import { h, hex, plural } from '../dom';
+import { h, hex, plural, scrollRowsIntoView } from '../dom';
 import { listingLang } from '../highlight';
 import type { Report } from '../types';
 import { codePane } from './code';
@@ -55,7 +55,8 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
       }
     }
     const first = cells[start];
-    if (first) hexPane.scrollTo({ top: Math.max(0, (first.parentElement as HTMLElement).offsetTop - hexPane.clientHeight / 3), behavior: 'smooth' });
+    const last = cells[Math.min(end, bytes.length) - 1] ?? first;
+    if (first) scrollRowsIntoView(hexPane, first.parentElement as HTMLElement, last.parentElement as HTMLElement);
   };
 
   const listingText = 'Ok' in bc.listing ? bc.listing.Ok : null;
@@ -112,6 +113,9 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
               click: () => {
                 markBytes(r.start, r.end);
                 describe(r.start, r.end);
+                // the listing shows the region's first instruction, where it has one
+                const first = bc.instructions.find((x) => x.start >= r.start && x.start < r.end);
+                if (first && pane) pane.scrollTo(first.line);
               },
             },
           },

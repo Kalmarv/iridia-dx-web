@@ -6,8 +6,8 @@ cbuffer Plasma : register(b0)
     float  speed = 1.0;       // 0.2 .. 3
     float  scale = 6.0;       // 1 .. 12
     float  sharpness = 1.5;   // 0.5 .. 4
-    float3 colorA = float3(0.08, 0.10, 0.35);
-    float3 colorB = float3(0.95, 0.45, 0.20);
+    float3 colorA = float3(209.0 / 255.0, 213.0 / 255.0, 1.0);          // #d1d5ff
+    float3 colorB = float3(104.0 / 255.0, 211.0 / 255.0, 238.0 / 255.0); // #68d3ee
 };
 
 float4 main(float4 position : SV_Position, float2 uv : TEXCOORD0) : SV_Target

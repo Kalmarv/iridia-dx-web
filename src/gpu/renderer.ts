@@ -84,11 +84,14 @@ export class Preview {
   private built: Built | null = null;
   private scene: Scene | null = null;
   private building: Promise<void> | null = null;
+  private builds = 0;
   private blits = new Map<string, GPURenderPipeline>();
   private fit: GPUBuffer;
   background: [number, number, number, number] = [0.08, 0.08, 0.1, 1];
   lost: string | null = null;
   onLost: (why: string) => void = () => undefined;
+  /** A WebGPU error outside a build's error scope: one met while drawing or reading back. */
+  onError: (message: string) => void = () => undefined;
 
   static async create(canvas: HTMLCanvasElement): Promise<Preview | string> {
     if (!('gpu' in navigator) || !navigator.gpu) return 'This browser has no WebGPU, so there is no live preview. Everything else on the page works.';
@@ -112,6 +115,7 @@ export class Preview {
     device.queue.writeTexture({ texture: this.fallback }, new Uint8Array([255, 0, 255, 255]), { bytesPerRow: 4 }, [1, 1]);
     this.camera = device.createBuffer({ size: W.CAMERA_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.fit = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    device.addEventListener('uncapturederror', (e) => this.onError((e as GPUUncapturedErrorEvent).error.message));
     void device.lost.then((info) => {
       this.lost = `The GPU device was lost (${info.reason}): ${info.message}`;
       this.onLost(this.lost);
@@ -131,8 +135,12 @@ export class Preview {
     if (this.built) this.built.groups = null;
   }
 
-  /** Build the scene's pipelines: resolves once they are made, or rejects with WebGPU's own words. */
-  async show(scene: Scene): Promise<void> {
+  /**
+   * Build the scene's pipelines: resolves true once they are made and drawn from, false if a later `show` began
+   * meanwhile (its scene is the one drawn), or rejects with WebGPU's own words.
+   */
+  async show(scene: Scene): Promise<boolean> {
+    const n = ++this.builds;
     const build = this.build(scene);
     this.building = build.then(
       () => undefined,
@@ -141,10 +149,16 @@ export class Preview {
     // the last frame stays until the new pipelines are made; a scene that fails to build draws nothing
     try {
       const built = await build;
+      if (n !== this.builds) {
+        built.destroy();
+        return false;
+      }
       this.built?.destroy();
       this.built = built;
       this.scene = scene;
+      return true;
     } catch (e) {
+      if (n !== this.builds) return false;
       this.built?.destroy();
       this.built = null;
       this.scene = null;
@@ -322,20 +336,25 @@ export class Preview {
       const o = outputs.find((x) => x.location === l);
       targets.push(o ? { format: formatOf(o.scalar) } : null);
     }
-    const depthStencil: GPUDepthStencilState = { format: 'depth24plus', depthCompare: 'less', depthWriteEnabled: true };
-    const base = { layout, vertex: { module: vs, entryPoint: 'main', buffers: vertex.buffers }, depthStencil };
+    const wireframe = scene.wireframe && !scene.quad;
+    // under a wireframe the fill is pushed back by a bias so that its edges, drawn at the same depths, pass a
+    // less-equal test: WebGPU allows no depth bias on line (or point) topologies, so the lines cannot carry it
+    const depthStencil: GPUDepthStencilState = { format: 'depth24plus', depthCompare: 'less', depthWriteEnabled: true, ...(wireframe ? { depthBias: 2, depthBiasSlopeScale: 1 } : {}) };
+    const base = { layout, vertex: { module: vs, entryPoint: 'main', buffers: vertex.buffers } };
     const pipeline = await device.createRenderPipelineAsync({
       ...base,
+      depthStencil,
       label: 'preview',
       fragment: { module: fs, entryPoint: 'main', targets },
       primitive: { topology: 'triangle-list', cullMode: 'none' },
     });
     let wire: GPURenderPipeline | null = null;
-    if (scene.wireframe && !scene.quad) {
+    if (wireframe) {
       const flat = await compiled(device, W.FLAT_COLOUR, 'wireframe');
       wire = await device.createRenderPipelineAsync({
         ...base,
-        depthStencil: { format: 'depth24plus', depthCompare: 'less-equal', depthWriteEnabled: false, depthBias: -2, depthBiasSlopeScale: -1 },
+        label: 'wireframe',
+        depthStencil: { format: 'depth24plus', depthCompare: 'less-equal', depthWriteEnabled: false },
         fragment: { module: flat, entryPoint: 'main', targets: targets.map((t, i) => (i === scene.target && t ? { format: t.format } : t ? { format: t.format, writeMask: 0 } : null)) },
         primitive: { topology: 'line-list' },
       });

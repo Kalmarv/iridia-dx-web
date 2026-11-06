@@ -45,7 +45,7 @@ function themeButton(): HTMLElement {
 
 const header = h(
   'header.top',
-  h('a.brand', { href: '#/' }, h('img.logo', { src: logo, alt: '', width: 22, height: 22 }), 'iridia'),
+  h('a.brand', { href: '#/' }, h('img.logo', { src: logo, alt: '', width: 91, height: 80 }), 'iridia'),
   h('p.tagline', 'iridia reads compiled Direct3D shaders and lifts them into programs other tools can read, write and run. Here it runs in your browser.'),
   h(
     'nav.links',
@@ -59,11 +59,15 @@ const header = h(
 );
 app.append(header, progress, main, dropOverlay);
 
+const bar = progress.firstChild as HTMLElement;
 onProgress((loaded, total) => {
   progress.classList.add('active');
-  const pct = total ? Math.min(100, (loaded / total) * 100) : 50;
-  (progress.firstChild as HTMLElement).style.width = `${pct}%`;
-  progress.setAttribute('aria-valuenow', String(Math.round(pct)));
+  // with no total (or a compressed one, which the bytes read do not count against) the bar slides without a measure
+  progress.classList.toggle('indeterminate', !total);
+  const pct = total ? Math.min(100, (loaded / total) * 100) : 0;
+  bar.style.width = total ? `${pct}%` : '';
+  if (total) progress.setAttribute('aria-valuenow', String(Math.round(pct)));
+  else progress.removeAttribute('aria-valuenow');
 });
 
 async function loadGlue() {
@@ -71,7 +75,17 @@ async function loadGlue() {
   try {
     return await glue();
   } finally {
+    // the bar fills and fades out; it is emptied once gone, ready for nothing else to show
+    progress.classList.remove('indeterminate');
+    bar.style.width = '100%';
+    progress.setAttribute('aria-valuenow', '100');
     progress.classList.remove('active');
+    progress.classList.add('done');
+    setTimeout(() => {
+      if (progress.classList.contains('active')) return;
+      progress.classList.remove('done');
+      bar.style.width = '';
+    }, 600);
   }
 }
 
@@ -82,7 +96,7 @@ function home(): HTMLElement {
     h(
       'section.dropzone',
       { 'aria-label': 'open a shader' },
-      h('img.dropzone-art', { src: logo, alt: '', width: 220, height: 220 }),
+      h('img.dropzone-art', { src: logo, alt: '', width: 91, height: 80 }),
       h('h1', 'Drop a compiled shader'),
       h('p', 'DXBC (Shader Model 4 and 5), DXIL (6.x) or a Direct3D 9 token stream (1.1 to 3.0): .cso, .fxo, .vso, .pso or a container. Drop a vertex and a pixel program together to link them.'),
       h('p', pick, h('span.dim', ' · nothing leaves your machine: it all runs here, in WebAssembly and WebGPU.')),

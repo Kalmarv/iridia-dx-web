@@ -1,9 +1,10 @@
-//! The naga path: everything the page shows that only iridia's released naga-module crates do today, in one place.
+//! The old path: everything the page shows for DXBC and DXIL until their readers lift onto the IR, in one place.
 //!
 //! DXBC and DXIL lift into naga modules (`iridia-dxbc`, `iridia-dxil`); the analyses (what reaches each output lane,
 //! how a constant buffer holds a matrix), the specialisation of constant words and the `iridia-exec` executor work on
-//! those modules, and on `iridia-d3d9`'s for Direct3D 9 `vs_3_0` and `ps_3_0`. When the readers and analyses move onto
-//! the IR this module goes, and `ir` takes what it did.
+//! those modules. Direct3D 9 is on the IR alone. When the DXBC and DXIL readers move onto the IR this module is
+//! deleted, and `ir` takes what it did: `tests/legacy.rs` fails once it is gone, as a reminder to make that test the
+//! check that it stays gone.
 
 use iridia::flow::{Flow, Via};
 use iridia::{ConstantType, IoType, Program, ResourceId, ResourceKind, Stage};
@@ -30,7 +31,7 @@ pub struct Source {
     pub index: u32,
     /// The input's or texel's lane; a constant's byte offset in its buffer.
     pub at: u32,
-    /// `value`, `coordinate` or `control`: how it reaches the lane (constants: `value`).
+    /// `value`, `coordinate` or `control`: how it reaches the lane.
     pub via: &'static str,
 }
 
@@ -94,13 +95,6 @@ impl NagaProgram {
         })
     }
 
-    /// Lift a Direct3D 9 `vs_3_0` or `ps_3_0` token stream with the older reader.
-    pub fn d3d9(bytes: &[u8]) -> Result<NagaProgram, String> {
-        iridia_d3d9::lift(bytes)
-            .map(|program| NagaProgram { program })
-            .map_err(|e| e.to_string())
-    }
-
     /// The interface the lift states.
     pub fn interface(&self) -> &iridia::Interface {
         &self.program.interface
@@ -127,7 +121,7 @@ impl NagaProgram {
     /// The program's stable text: its interface header, then the module.
     pub fn text(&self) -> Result<Lifted, String> {
         Ok(Lifted {
-            kind: "naga",
+            kind: "legacy",
             text: self.program.text().map_err(|e| e.to_string())?,
             origins: Vec::new(),
         })
@@ -172,7 +166,7 @@ impl NagaProgram {
             )
             .collect();
         Ok(Linked {
-            path: "naga",
+            path: "legacy",
             wgsl: Wgsl {
                 text: written.text,
                 bindings: written
@@ -198,7 +192,28 @@ impl NagaProgram {
             .iter()
             .map(|(r, offset, word)| ((ResourceId(*r), *offset), *word))
             .collect();
-        let s = iridia::specialise::specialise(&self.program, &words)?;
+        // a program the pass cannot transform keeps its code: the pinned words stay uniforms, read with their values
+        let Ok(s) = iridia::specialise::specialise(&self.program, &words) else {
+            let text = self.text()?;
+            let wgsl = iridia::emit::wgsl(&self.program).map_err(|e| e.to_string());
+            return Ok(Specialised {
+                by: "constant words",
+                before: text.clone(),
+                wgsl_before: wgsl.clone(),
+                lifted: text,
+                wgsl,
+                folded: Some(0),
+                unread: Vec::new(),
+                ignored: vec![format!(
+                    "{} stay uniforms, read with the values pinned: this program's code is kept as it is",
+                    if words.len() == 1 {
+                        "the pinned word".to_owned()
+                    } else {
+                        format!("the {} pinned words", words.len())
+                    }
+                )],
+            });
+        };
         let names = |ids: &[ResourceId]| -> Vec<String> {
             ids.iter()
                 .filter_map(|id| s.program.interface.resource(*id))
@@ -222,7 +237,7 @@ impl NagaProgram {
             before: self.text()?,
             wgsl_before: iridia::emit::wgsl(&self.program).map_err(|e| e.to_string()),
             lifted: Lifted {
-                kind: "naga",
+                kind: "legacy",
                 text: s.program.text().map_err(|e| e.to_string())?,
                 origins: Vec::new(),
             },
@@ -241,32 +256,15 @@ impl NagaProgram {
             let flow = Flow::of_values(&g.values);
             flow.outputs()
                 .iter()
-                .map(|(&(output, lane), r)| {
-                    let mut sources = sources_of(r);
-                    if let Some(&node) = g.values.outputs().get(&(output, lane)) {
-                        let nodes = g.values.reached_from([node]);
-                        let read = iridia::WordsRead::of_nodes(&g.values, &g.interface, &nodes);
-                        for buffer in read.buffers() {
-                            for word in read.words(buffer) {
-                                sources.push(Source {
-                                    kind: "constant",
-                                    index: buffer.0,
-                                    at: word.saturating_mul(4),
-                                    via: "value",
-                                });
-                            }
-                        }
-                    }
-                    Reach {
-                        output,
-                        lane,
-                        sources,
-                    }
+                .map(|(&(output, lane), r)| Reach {
+                    output,
+                    lane,
+                    sources: sources_of(r, &p.interface),
                 })
                 .collect()
         });
         let discard = match &graph {
-            Ok(g) => sources_of(Flow::of_values(&g.values).discard_reach()),
+            Ok(g) => sources_of(Flow::of_values(&g.values).discard_reach(), &p.interface),
             Err(_) => Vec::new(),
         };
         let mut matrices = Vec::new();
@@ -314,7 +312,7 @@ impl NagaProgram {
     pub fn execute(&self, request: &Request, textures: &Textures) -> Executed {
         Executed {
             executor: "iridia-exec",
-            runs: "the naga module, in the bytecode's register view",
+            runs: "the lifted module, in the bytecode's register view",
             lanes: self.run(request, textures),
         }
     }
@@ -408,7 +406,9 @@ impl NagaProgram {
     }
 }
 
-fn sources_of(r: &iridia::flow::Reach) -> Vec<Source> {
+/// What reaches an output lane or the discard: input lanes, texel lanes and constant-buffer words (at their byte
+/// offset), each with the way it reaches.
+fn sources_of(r: &iridia::flow::Reach, interface: &iridia::Interface) -> Vec<Source> {
     let mut sources: Vec<Source> = r
         .inputs
         .iter()
@@ -425,6 +425,23 @@ fn sources_of(r: &iridia::flow::Reach) -> Vec<Source> {
         at: u32::from(t.lane),
         via: via(*v),
     }));
+    let constant_buffer = |id: ResourceId| {
+        interface
+            .resources
+            .iter()
+            .any(|res| res.id == id && matches!(res.kind, ResourceKind::ConstantBuffer { .. }))
+    };
+    sources.extend(
+        r.words
+            .iter()
+            .filter(|(w, _)| constant_buffer(w.resource))
+            .map(|(w, v)| Source {
+                kind: "constant",
+                index: w.resource.0,
+                at: w.word.saturating_mul(4),
+                via: via(*v),
+            }),
+    );
     sources
 }
 

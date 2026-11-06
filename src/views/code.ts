@@ -1,5 +1,5 @@
 // A code pane: highlighted lines with a gutter, lines that can be marked, clicked and scrolled to.
-import { h } from '../dom';
+import { h, scrollRowsIntoView } from '../dom';
 import { highlightLines, type Lang } from '../highlight';
 
 export interface Pane {
@@ -47,9 +47,7 @@ export function codePane(
     },
     scrollTo(line) {
       const r = rows[line];
-      if (!r) return;
-      const top = r.offsetTop - el.clientHeight / 3;
-      el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      if (r) scrollRowsIntoView(el, r);
     },
   };
 }

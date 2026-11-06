@@ -1,7 +1,7 @@
 // The page's examples: our own HLSL (or assembly), compiled by fxc, dxc or D3DAssemble (web/examples/build.sh). Each
 // names how the preview draws it and the textures, presets and pipeline state the page binds.
 
-export type View = 'quad' | 'mesh' | 'compute' | 'none';
+export type View = 'quad' | 'mesh' | 'compute';
 export type MeshName = 'plane' | 'cube' | 'sphere' | 'torus' | 'knot';
 export type TextureKind = 'checker' | 'brick' | 'brick-normal' | 'scene' | 'hdr-scene' | 'ripple' | 'marble' | 'grid';
 
@@ -130,14 +130,6 @@ export const EXAMPLES: Example[] = [
       skyColor: [0.4, 0.5, 0.7],
       exposure: [1],
     },
-  },
-  {
-    id: 'amplification',
-    title: 'Amplification program (refused)',
-    summary: 'as_6_5 (DXIL): iridia does not lift amplification programs, and says so.',
-    program: 'amplification/amplification.dxil',
-    sources: [{ name: 'amplification.hlsl', path: 'amplification/amplification.hlsl' }],
-    view: 'none',
   },
 ];
 

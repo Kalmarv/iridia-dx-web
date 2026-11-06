@@ -20,10 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", serde_json::to_string_pretty(&shader.report())?);
     if let Some(pins) = args.get(1) {
         let pins: iridia_web::view::Pins = serde_json::from_str(pins)?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&shader.specialisations(&pins))?
-        );
+        println!("{}", serde_json::to_string_pretty(&shader.specialised(&pins))?);
     }
     Ok(())
 }

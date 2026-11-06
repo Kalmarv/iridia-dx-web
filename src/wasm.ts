@@ -16,8 +16,8 @@ export function onProgress(f: (loaded: number, total: number) => void): () => vo
 async function fetchWithProgress(url: string): Promise<ArrayBuffer> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`the glue (${url}) answered ${response.status} ${response.statusText}`);
-  // a compressed response states the compressed length: progress is then shown against it, capped at the end
-  const total = Number(response.headers.get('content-length') ?? 0);
+  // a compressed response states the compressed length while the reader counts the bytes it gives: no total then
+  const total = response.headers.get('content-encoding') ? 0 : Number(response.headers.get('content-length') ?? 0);
   if (!response.body) return response.arrayBuffer();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

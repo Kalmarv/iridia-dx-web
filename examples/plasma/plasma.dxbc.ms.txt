@@ -16,9 +16,9 @@
 //   float sharpness;                   // Offset:   12 Size:     4
 //      = 0x3fc00000 
 //   float3 colorA;                     // Offset:   16 Size:    12
-//      = 0x3da3d70a 0x3dcccccd 0x3eb33333 
+//      = 0x3f51d1d2 0x3f55d5d6 0x3f800000 
 //   float3 colorB;                     // Offset:   32 Size:    12
-//      = 0x3f733333 0x3ee66666 0x3e4ccccd 
+//      = 0x3ed0d0d1 0x3f53d3d4 0x3f6eeeef 
 //
 // }
 //

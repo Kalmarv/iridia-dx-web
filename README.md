@@ -25,12 +25,21 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
+The page's browser checks run in a Chrome with WebGPU, started with `--remote-debugging-port` (they wait on the
+workspace's `data-preview` state: starting, building, ready, failed or none):
+
+```sh
+node scripts/variants.mjs http://127.0.0.1:5173/ --cdp 9222     # every preview the toolbar reaches: no WebGPU error
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222  # wording, the loading bar, linked scrolling
+```
+
 ## Layout
 
 - `glue/` is the `iridia-web` crate (not published, its own workspace). It reads a dropped file with dx's readers,
   lifts it through iridia's public pipeline and gives the page JSON reports. `ir.rs` is the IR path (Direct3D 9);
-  `legacy.rs` holds everything the older naga path still serves (Shader Model 4 to 6, Shader Model 3 vertex
-  programs) so that it can go in one piece when the IR path covers them.
+  `legacy.rs` holds what DXBC and DXIL still lift through until their readers are on the IR, so that it is deleted
+  in one piece then (`tests/legacy.rs` is expected to fail until it is).
+- `glue/tests/refused/` holds a program iridia refuses (not an example), for the tests of how a refusal reads.
 - `examples/` holds the page's examples: our own HLSL beside each compiled program, and Microsoft's listing of it
   (`.ms.txt`), which the glue's tests compare dx's listings against. `examples/build.sh` recompiles them with fxc
   and dxc; the compiled files are committed, so the page's build needs neither compiler.

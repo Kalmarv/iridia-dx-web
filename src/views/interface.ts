@@ -112,7 +112,7 @@ export function interfaceView(report: Report): HTMLElement {
   });
   return h(
     'div.interface',
-    h('p.lede', `${iface.stage} program · ${report.target ?? ''} · lifted by ${report.lifter ?? '—'} on the ${report.path === 'ir' ? 'IR path' : 'naga path'}`),
+    h('p.lede', `${iface.stage} program · ${report.target ?? ''} · lifted by ${report.lifter ?? '—'}`),
     varyings('Inputs', iface.inputs, wgsl, 'inputs'),
     varyings('Outputs', iface.outputs, wgsl, 'outputs'),
     h('section', h('h3', 'Resources'), resources.length ? resources : h('p.dim', 'None.')),

@@ -55,3 +55,17 @@ export function clear(el: Element): void {
 export const hex = (n: number, digits = 8): string => '0x' + n.toString(16).toUpperCase().padStart(digits, '0');
 
 export const plural = (n: number, word: string, many = word + 's'): string => `${n} ${n === 1 ? word : many}`;
+
+/**
+ * Scroll `pane` so that the rows `first` to `last` (descendants of it) are in view: centred when they fit, their top
+ * at the pane's top when they do not. Measured against the pane itself, not an offset parent.
+ */
+export function scrollRowsIntoView(pane: HTMLElement, first: HTMLElement, last: HTMLElement = first): void {
+  const box = pane.getBoundingClientRect();
+  const origin = box.top + pane.clientTop - pane.scrollTop;
+  const top = first.getBoundingClientRect().top - origin;
+  const bottom = last.getBoundingClientRect().bottom - origin;
+  const target = bottom - top <= pane.clientHeight ? (top + bottom - pane.clientHeight) / 2 : top;
+  const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  pane.scrollTo({ top: Math.max(0, Math.min(target, pane.scrollHeight - pane.clientHeight)), behavior });
+}

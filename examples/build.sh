@@ -41,7 +41,8 @@ fxc post/bloom-tonemap.hlsl ps_5_0 post/bloom-tonemap.dxbc
 fxc compute-fractal/julia.hlsl cs_5_0 compute-fractal/julia.dxbc
 dxc sdf-dxil/raymarch.hlsl ps_6_0 sdf-dxil/raymarch.dxil
 dxc pbr-dxil/pbr.hlsl ps_6_0 pbr-dxil/pbr.dxil
-dxc amplification/amplification.hlsl as_6_5 amplification/amplification.dxil
+# not an example: a program iridia refuses, for the glue's tests
+dxc ../glue/tests/refused/amplification/amplification.hlsl as_6_5 ../glue/tests/refused/amplification/amplification.dxil
 
 # pixel 1.1 has no HLSL compiler any more: D3DAssemble assembles it, and D3DDisassemble lists it
 "$WINPY" "$(wine_path "$here/../../iridia-d3d9-ir/tests/oracles/assemble.py")" "$(wine_path "$D3DCOMPILER")" \

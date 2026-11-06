@@ -66,7 +66,7 @@ export interface Region { label: string; tag: string | null; start: number; end:
 export interface Instruction { line: number; start: number; end: number }
 export interface Bytecode { regions: Region[]; listing: Result<string>; instructions: Instruction[]; code_base: number }
 
-export interface Lifted { kind: 'ir' | 'naga'; text: string; origins: [number, number][] }
+export interface Lifted { kind: 'ir' | 'legacy'; text: string; origins: [number, number][] }
 
 export interface Io {
   name: string;
@@ -99,7 +99,7 @@ export interface Report {
   size: number;
   target: string | null;
   lifter: string | null;
-  path: 'ir' | 'naga';
+  path: 'ir' | 'legacy';
   bytecode: Bytecode;
   interface: Interface | null;
   refusal: { message: string; byte: number | null } | null;
@@ -124,7 +124,6 @@ export interface Specialised {
   unread: string[];
   ignored: string[];
 }
-export interface Specialisations { ir: Result<Specialised> | null; naga: Result<Specialised> | null }
 
 export interface Request {
   lanes: { inputs: [number, number, number, number][] }[];

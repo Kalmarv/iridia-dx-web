@@ -38,7 +38,7 @@ fn open(path: &Path) -> Shader {
 #[test]
 fn every_example_lists_as_microsofts_tools_list_it() {
     let files = compiled();
-    assert_eq!(files.len(), 11, "{files:?}");
+    assert_eq!(files.len(), 10, "{files:?}");
     let mut differ = Vec::new();
     for path in &files {
         let report = open(path).report();
@@ -68,17 +68,23 @@ fn every_example_lists_as_microsofts_tools_list_it() {
     assert!(differ.is_empty(), "{}", differ.join("\n"));
 }
 
+/// A program iridia refuses is listed all the same, and its report says why.
 #[test]
-fn every_example_but_the_amplification_program_lifts_to_wgsl() {
+fn a_refused_program_is_listed_and_says_why() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/refused/amplification/amplification.dxil");
+    let report = open(&path).report();
+    let reference = std::fs::read_to_string(path.with_extension("dxil.ms.txt")).unwrap();
+    assert_eq!(report.bytecode.listing.unwrap(), reference);
+    let refusal = report.refusal.unwrap();
+    assert!(refusal.message.contains("amplification"), "{}", refusal.message);
+    assert!(report.wgsl.is_err());
+}
+
+#[test]
+fn every_example_lifts_to_wgsl() {
     for path in compiled() {
         let report = open(&path).report();
         let name = path.file_name().unwrap().to_str().unwrap();
-        if name == "amplification.dxil" {
-            let refusal = report.refusal.unwrap();
-            assert!(refusal.message.contains("amplification"), "{}", refusal.message);
-            assert!(report.wgsl.is_err());
-            continue;
-        }
         assert!(report.refusal.is_none(), "{name}: {:?}", report.refusal);
         let wgsl = report.wgsl.unwrap_or_else(|e| panic!("{name}: {e}"));
         assert!(wgsl.text.contains("fn main"), "{name}: {}", wgsl.text);
@@ -196,4 +202,53 @@ fn bytes_that_are_no_shader_are_refused_as_such() {
     assert!(e.contains("not a compiled Direct3D shader"), "{e}");
     let e = Shader::open(b"DXBC truncated".to_vec()).unwrap_err();
     assert!(e.contains("DXBC container"), "{e}");
+}
+
+#[test]
+fn a_constant_that_only_decides_a_branch_reaches_through_control() {
+    // lit-brick.hlsl: `if (useNormalMap != 0)` is fxc's `if_nz cb0[2].w` (byte 44) and nothing else reads it; the
+    // light direction (bytes 0 to 8) is arithmetic, and the tiling (bytes 56, 60) scales the texture coordinate
+    let report = open(&examples().join("lit-brick/lit-brick.dxbc")).report();
+    let reach = report.analyses.unwrap().reach.unwrap();
+    let red = reach.iter().find(|r| r.output == 0 && r.lane == 0).unwrap();
+    let constant = |at: u32| {
+        red.sources
+            .iter()
+            .find(|s| s.kind == "constant" && s.at == at)
+            .map(|s| s.via)
+    };
+    assert_eq!(constant(44), Some("control"));
+    assert_eq!(constant(0), Some("value"));
+    assert_eq!(constant(56), Some("coordinate"));
+}
+
+#[test]
+fn the_plasma_colours_default_to_its_palette() {
+    // plasma.hlsl states colorA = #d1d5ff and colorB = #68d3ee: fxc keeps them as the constants' defaults, which
+    // the page's colour controls, its first frame and the CPU runs all start from
+    let report = open(&examples().join("plasma/plasma.dxbc")).report();
+    let interface = report.interface.unwrap();
+    let layout = interface
+        .resources
+        .iter()
+        .find_map(|r| match &r.kind {
+            iridia_ir::interface::ResourceKind::ConstantBuffer { layout } => Some(layout),
+            _ => None,
+        })
+        .unwrap();
+    let rgb = |name: &str| -> Vec<u8> {
+        let c = layout.constants.iter().find(|c| c.name == name).unwrap();
+        let bytes = c
+            .default
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name} has no default"));
+        let (words, _) = bytes.as_chunks::<4>();
+        words
+            .iter()
+            .take(3)
+            .map(|w| (f32::from_le_bytes(*w) * 255.0).round() as u8)
+            .collect()
+    };
+    assert_eq!(rgb("colorA"), [0xd1, 0xd5, 0xff]);
+    assert_eq!(rgb("colorB"), [0x68, 0xd3, 0xee]);
 }

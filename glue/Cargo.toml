@@ -20,7 +20,6 @@ dxbc-reader = "0.5.2"
 dxcontainer = "0.5.2"
 dxil-reader = "0.5.2"
 iridia = { path = "../../iridia" }
-iridia-d3d9 = { path = "../../iridia-d3d9" }
 iridia-d3d9-ir = { path = "../../iridia-d3d9-ir" }
 iridia-dxbc = { path = "../../iridia-dxbc" }
 iridia-dxil = { path = "../../iridia-dxil" }

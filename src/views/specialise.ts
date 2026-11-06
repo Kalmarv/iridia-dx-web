@@ -5,7 +5,7 @@ import { getLanes } from '../constants';
 import { changed, diffLines, hunks } from '../diff';
 import { h, plural } from '../dom';
 import { highlightLines, type Lang } from '../highlight';
-import type { Report, Specialisations, Specialised, StateInfo } from '../types';
+import type { Report, Result, Specialised, StateInfo } from '../types';
 import { err, ok } from '../types';
 
 export interface SpecialiseState {
@@ -47,7 +47,7 @@ export function specialiseView(
   buffers: Buffer[],
   st: SpecialiseState,
   onChange: () => void,
-): { el: HTMLElement; update(result: Specialisations | null, error?: string): void } {
+): { el: HTMLElement; update(result: Result<Specialised> | null, error?: string): void } {
   const pinnable = buffers.flatMap((b) => b.fields.filter((f) => !f.matrix && f.role?.kind !== 'time' && f.role?.kind !== 'mouse').map((f) => ({ b, f })));
   const fieldList = h(
     'ul.pins',
@@ -107,9 +107,9 @@ export function specialiseView(
     h(
       'div.spec-pins',
       h('h3', 'Constants'),
-      h('p.dim', 'A pinned constant is folded where it decides a branch or a select (the naga path). The IR path folds pipeline state.'),
+      h('p.dim', 'A pinned constant is folded where it decides a branch or a select; elsewhere the program reads it as before, with the value pinned.'),
       fieldList,
-      report.state.length ? [h('h3', 'Pipeline state'), h('p.dim', 'Always folded on the IR path: Direct3D 9’s defaults, or what you set here.'), stateList] : null,
+      report.state.length ? [h('h3', 'Pipeline state'), h('p.dim', 'Always folded: Direct3D 9’s defaults, or what you set here.'), stateList] : null,
     ),
     results,
   );
@@ -148,7 +148,7 @@ export function specialiseView(
         results.append(h('p.dim', 'Pin something to specialise.'));
         return;
       }
-      results.append(...[one('IR path', result.ir), one('naga path', result.naga)].filter((x): x is HTMLElement => !!x));
+      results.append(one('Specialised', result) ?? h('p.dim', 'The program did not lift, so there is nothing to specialise.'));
     },
   };
 }

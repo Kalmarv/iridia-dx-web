@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// A lifted program's text, and the source instruction each line came from where the lift records it.
 #[derive(Clone, Debug, Serialize)]
 pub struct Lifted {
-    /// `ir` for iridia's own IR, `naga` for a naga module (the path readers not yet on the IR take).
+    /// `ir` for iridia's own IR, `legacy` for a module of the old path (DXBC and DXIL, until they lift onto the IR).
     pub kind: &'static str,
     /// The text.
     pub text: String,
@@ -62,7 +62,7 @@ pub struct Wgsl {
 /// A vertex program's WGSL written for the pixel program it feeds.
 #[derive(Clone, Debug, Serialize)]
 pub struct Linked {
-    /// The path both programs took: `ir` or `naga`.
+    /// The path both programs took: `ir` or `legacy`.
     pub path: &'static str,
     /// The vertex program's WGSL: its resources after the pixel program's in each bind group, its outputs where the
     /// pixel program reads them. `outputs` lists the built-ins and what the pixel program reads (an output it does not
@@ -108,7 +108,7 @@ impl Pins {
 /// What specialising gave.
 #[derive(Clone, Debug, Serialize)]
 pub struct Specialised {
-    /// What was folded: `pipeline state` (the IR's pass) or `constant words` (the naga path's).
+    /// What was folded: `pipeline state` (the IR's pass) or `constant words` (the old path's).
     pub by: &'static str,
     /// The program's text before: what the path shows unpinned.
     pub before: Lifted,

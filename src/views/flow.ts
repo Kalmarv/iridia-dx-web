@@ -1,11 +1,27 @@
 // The analyses iridia runs on a lifted program: what each output lane is made of (inputs, constants, texels, and
 // whether as its value, an address or a decision), what decides a discard, which constant words the program reads.
 import { h, hex } from '../dom';
-import type { Analyses, Interface, Report, Source } from '../types';
+import type { Analyses, ConstantType, Interface, Report, Source } from '../types';
 import { err, ok } from '../types';
 import { linesText } from './interface';
 
 const LANES = 'xyzw';
+
+/** The word `bytes` into a constant of type `ty`, as a suffix: `.y`, `[2].x` (a matrix line or array element), `.member.z`. */
+function place(ty: ConstantType, bytes: number): string {
+  if ('scalar' in ty) return bytes ? `+${bytes}` : '';
+  if ('vector' in ty) return ty.vector.width > 1 ? `.${LANES[bytes >> 2] ?? bytes}` : '';
+  if ('matrix' in ty) {
+    const stride = ty.matrix.stride || 16;
+    return `[${Math.floor(bytes / stride)}].${LANES[(bytes % stride) >> 2]}`;
+  }
+  if ('array' in ty) {
+    const stride = ty.array.stride || 16;
+    return `[${Math.floor(bytes / stride)}]${place(ty.array.element, bytes % stride)}`;
+  }
+  const m = [...ty.struct.members].reverse().find((m) => m.offset <= bytes);
+  return m ? `.${m.name}${place(m.ty, bytes - m.offset)}` : `+${bytes}`;
+}
 
 function sourceName(s: Source, iface: Interface): string {
   if (s.kind === 'input') {
@@ -16,9 +32,9 @@ function sourceName(s: Source, iface: Interface): string {
   if (s.kind === 'constant') {
     const k = r && typeof r.kind === 'object' && 'constant_buffer' in r.kind ? r.kind.constant_buffer.layout.constants : [];
     const c = [...k].reverse().find((c) => c.offset <= s.at);
-    return c ? `${c.name}${s.at > c.offset ? `+${s.at - c.offset}` : ''}` : `${r?.provenance.name ?? 'cb'}@${hex(s.at, 4)}`;
+    return c ? `${c.name}${place(c.ty, s.at - c.offset)}` : `${r?.provenance.name ?? 'cb'}@${hex(s.at, 4)}`;
   }
-  return `${r?.provenance.name ?? `texture ${s.index}`}${s.at ? `.${LANES[s.at] ?? s.at}` : ''}`;
+  return `${r?.provenance.name ?? `texture ${s.index}`}.${LANES[s.at] ?? s.at}`;
 }
 
 function chips(sources: Source[], iface: Interface): HTMLElement {
@@ -36,7 +52,6 @@ export function flowView(report: Report): HTMLElement {
     return h(
       'div.flow',
       h('div.error-box', h('strong', 'No analyses for this program: '), err(report.analyses) ?? ''),
-      h('p.note', 'The analyses read naga-path programs: DXBC, DXIL, and Direct3D 9 vs_3_0 and ps_3_0.'),
     );
   const reach = ok(a.reach);
   const byOutput = new Map<number, typeof reach>();
@@ -47,7 +62,7 @@ export function flowView(report: Report): HTMLElement {
   }
   return h(
     'div.flow',
-    h('p.lede', 'Lane provenance: what reaches each output lane, read from the lifted program’s value graph. A source reaches as a value, as a coordinate (it picks the texel sampled), or as a decision (a branch or select).'),
+    h('p.lede', 'Lane provenance: what reaches each output lane, read from the lifted program’s value graph. A source reaches as a value (arithmetic and selects), as a coordinate (it picks the texel sampled), or only as a decision (a branch, a loop’s exit or a discard).'),
     h('div.legend', h('span.chip.input', 'input'), h('span.chip.constant', 'constant'), h('span.chip.texel', 'texel'), h('span.chip.via-coordinate.input', 'as a coordinate'), h('span.chip.via-control.input', 'as a decision')),
     reach
       ? h(

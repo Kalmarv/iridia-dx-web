@@ -78,15 +78,6 @@ pub struct Report {
     pub needs_quad: bool,
 }
 
-/// What specialising by the page's pins gave, by path.
-#[derive(Clone, Debug, Serialize)]
-pub struct Specialisations {
-    /// The IR's pass (pipeline state), where the program is on the IR.
-    pub ir: Option<Result<Specialised, String>>,
-    /// The naga path's (constant words), where it lifts there.
-    pub naga: Option<Result<Specialised, String>>,
-}
-
 /// A dropped or chosen shader file.
 #[wasm_bindgen]
 #[derive(Debug)]
@@ -116,7 +107,7 @@ impl Shader {
     pub fn open(bytes: Vec<u8>) -> Result<Shader, String> {
         let format = Format::of(&bytes)?;
         let (ir, naga) = match format {
-            Format::D3d9 => (Some(IrProgram::d3d9(&bytes)), Some(NagaProgram::d3d9(&bytes))),
+            Format::D3d9 => (Some(IrProgram::d3d9(&bytes)), None),
             Format::Dxbc => (None, Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string()))),
             Format::Dxil => (None, Some(NagaProgram::dxil(&bytes).map_err(|r| r.to_string()))),
         };
@@ -163,16 +154,11 @@ impl Shader {
         let bytecode = container::bytecode(&self.bytes, self.format);
         let code_base = bytecode.code_base;
         let state = self.state();
+        // the analyses read the old path's modules: a program on the IR has none until they move onto it
         let analyses = match &self.naga {
             Some(Ok(n)) => Ok(n.analyses()),
-            Some(Err(e)) => Err(match self.format {
-                Format::D3d9 => format!(
-                    "the analyses read naga modules, and iridia-d3d9 (the naga-path reader of Direct3D 9) did not \
-                     lift this program: {e}"
-                ),
-                _ => e.clone(),
-            }),
-            None => Err("no naga-path lift".to_owned()),
+            Some(Err(e)) => Err(e.clone()),
+            None => Err("the analyses do not read IR programs".to_owned()),
         };
         let mut executors = Vec::new();
         if matches!(self.ir, Some(Ok(_))) {
@@ -267,7 +253,7 @@ impl Shader {
                     size: self.bytes.len(),
                     target,
                     lifter,
-                    path: "naga",
+                    path: "legacy",
                     bytecode,
                     interface,
                     refusal,
@@ -284,8 +270,9 @@ impl Shader {
     }
 
     /// The program specialised by `pins` on each path that lifts it.
-    pub fn specialisations(&self, pins: &Pins) -> Specialisations {
-        let ir = match &self.ir {
+    /// The program specialised by `pins` on the path it takes, or none where it did not lift.
+    pub fn specialised(&self, pins: &Pins) -> Option<Result<Specialised, String>> {
+        match &self.ir {
             Some(Ok(p)) => {
                 // the state the page does not pin keeps its default, so the program still has a WGSL form
                 let mut full = self.default_pins();
@@ -297,13 +284,12 @@ impl Shader {
                 full.words.clone_from(&pins.words);
                 Some(p.specialise(&full, &self.default_pins()))
             }
-            _ => None,
-        };
-        let naga = match &self.naga {
-            Some(Ok(n)) if !pins.words.is_empty() || self.ir.is_none() => Some(n.specialise(pins)),
-            _ => None,
-        };
-        Specialisations { ir, naga }
+            Some(Err(_)) => None,
+            None => match &self.naga {
+                Some(Ok(n)) => Some(n.specialise(pins)),
+                _ => None,
+            },
+        }
     }
 
     /// This vertex program's WGSL written for `consumer`, the pixel program it feeds, on the path both programs take
@@ -390,12 +376,12 @@ impl Shader {
         json(&self.report())
     }
 
-    /// The specialisations for `pins` (JSON: `{"words": [[resource, offset, word]], "state": [[resource, [lanes]]]}`),
-    /// as JSON.
+    /// The program specialised by `pins` (JSON: `{"words": [[resource, offset, word]], "state": [[resource,
+    /// [lanes]]]}`), as JSON: a result, or null where the program did not lift.
     #[wasm_bindgen(js_name = specialise)]
     pub fn specialise_json(&self, pins: &str) -> String {
         match serde_json::from_str::<Pins>(pins) {
-            Ok(pins) => json(&self.specialisations(&pins)),
+            Ok(pins) => json(&self.specialised(&pins)),
             Err(e) => json(&Err::<(), String>(format!("pins: {e}"))),
         }
     }

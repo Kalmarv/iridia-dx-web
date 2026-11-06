@@ -73,11 +73,11 @@ export function liftView(report: Report, lifted: Lifted | null, wgsl: string | n
   const tie = names.size
     ? 'WGSL lines named after IR values are tied to them.'
     : lifted?.kind === 'ir'
-      ? 'naga writes no source map, so WGSL lines are not tied to the IR here.'
-      : 'The naga path keeps no source words, so neither side is tied to the bytecode.';
+      ? 'The WGSL writer keeps no source map, so WGSL lines are not tied to the IR here.'
+      : 'This lift keeps no source words, so neither side is tied to the bytecode.';
   return h(
     'div.lift',
-    h('div.lift-head', h('span', `${title}: ${lifted?.kind === 'ir' ? "iridia's IR, after specialise, promote and simplify" : 'the naga module iridia lifted, as text'}`), h('span.dim', tie)),
+    h('div.lift-head', h('span', `${title}: ${lifted?.kind === 'ir' ? "iridia's IR, after specialise, promote and simplify" : 'the module iridia lifted, as text'}`), h('span.dim', tie)),
     lifted?.kind === 'ir' ? strip : null,
     h('div.split', h('div.col', h('h3', lifted?.kind === 'ir' ? 'IR' : 'Program'), left), h('div.col', h('h3', 'WGSL'), right)),
   );
