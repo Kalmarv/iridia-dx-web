@@ -1,0 +1,60 @@
+[package]
+name = "iridia-web"
+description = "The wasm glue of iridia's web demo: reads, lifts, analyses and runs a dropped shader for the page"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/Kalmarv/iridia"
+publish = false
+
+# Its own workspace: the page's build does not touch the library workspace's manifest or lockfile.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+d3d9-reader = "0.5.2"
+dxbc-reader = "0.5.2"
+dxcontainer = "0.5.2"
+dxil-reader = "0.5.2"
+iridia = { path = "../../iridia" }
+iridia-d3d9 = { path = "../../iridia-d3d9" }
+iridia-d3d9-ir = { path = "../../iridia-d3d9-ir" }
+iridia-dxbc = { path = "../../iridia-dxbc" }
+iridia-dxil = { path = "../../iridia-dxil" }
+iridia-exec = { path = "../../iridia-exec" }
+iridia-exec-ir = { path = "../../iridia-exec-ir" }
+iridia-ir = { path = "../../iridia-ir" }
+iridia-naga = { path = "../../iridia-naga", default-features = false, features = ["wgsl"] }
+iridia-passes = { path = "../../iridia-passes" }
+naga = { version = "30.0.1", package = "primase-naga", default-features = false, features = ["wgsl-out"] }
+# iridia-naga lowers the IR to naga as published; the naga path above uses the fork
+stock-naga = { version = "=30.0.1", package = "naga", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "=1.0.154"
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+# the tests read written WGSL back, to check what a pair links
+stock-naga = { version = "=30.0.1", package = "naga", default-features = false, features = ["wgsl-in"] }
+
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+unused_must_use = "deny"
+
+[lints.clippy]
+float_cmp = "allow"
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+iter_over_hash_type = "deny"
+disallowed_methods = "allow"
+disallowed_types = "allow"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

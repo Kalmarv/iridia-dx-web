@@ -1,0 +1,7 @@
+    ps_1_1
+    def c0, 0.850000024, 0.949999988, 1, 1
+    tex t0
+    texbem t1, t0
+    mul r0, t1, c0
+
+// approximately 3 instruction slots used (2 texture, 1 arithmetic)
