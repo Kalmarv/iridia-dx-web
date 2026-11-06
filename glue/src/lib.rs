@@ -164,7 +164,7 @@ impl Shader {
         if matches!(self.ir, Some(Ok(_))) {
             executors.push("iridia-exec-ir");
         }
-        if matches!(self.naga, Some(Ok(_))) {
+        if matches!(&self.naga, Some(Ok(n)) if n.runs()) {
             executors.push("iridia-exec");
         }
         let needs_quad = match (&self.ir, &self.naga) {
@@ -344,7 +344,9 @@ impl Shader {
             }
             out.push(p.execute(&request, &self.textures));
         }
-        if let Some(Ok(n)) = &self.naga {
+        if let Some(Ok(n)) = &self.naga
+            && n.runs()
+        {
             out.push(n.execute(request, &self.textures));
         }
         out

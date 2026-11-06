@@ -4,8 +4,7 @@ import { h, hex, plural, scrollRowsIntoView } from '../dom';
 import { listingLang } from '../highlight';
 import type { Report } from '../types';
 import { codePane } from './code';
-// dx's mark: a copy of dx's docs/logo.svg (Kalmarv/dx 4c2de56), the file its README shows
-import dxLogo from '../assets/dx-logo.svg?url';
+import { DX } from '../marks';
 
 const BAND = 8;
 
@@ -139,7 +138,7 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
     'div.bytecode',
     h('div.bytecode-side', h('h3', 'Regions'), legend, notes),
     h('div.bytecode-hex', h('h3', `Bytes · ${plural(bytes.length, 'byte')}`), hexPane),
-    h('div.bytecode-listing', h('h3.credit', h('img.credit-mark', { src: dxLogo, alt: '', width: 102, height: 102 }), report.format === 'dxil' ? 'dxc -dumpbin, as dx writes it' : 'D3DDisassemble, as dx writes it'), listingEl),
+    h('div.bytecode-listing', h('h3.credit', h('img.credit-mark', { src: DX.mark, alt: '', width: DX.size[0], height: DX.size[1] }), report.format === 'dxil' ? 'dxc -dumpbin, as dx writes it' : 'D3DDisassemble, as dx writes it'), listingEl),
     status,
   );
   if (focusByte !== null && focusByte < bytes.length) requestAnimationFrame(() => markBytes(focusByte, focusByte + 4, 'bad'));

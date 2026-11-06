@@ -89,7 +89,14 @@ fn every_example_lifts_to_wgsl() {
         let wgsl = report.wgsl.unwrap_or_else(|e| panic!("{name}: {e}"));
         assert!(wgsl.text.contains("fn main"), "{name}: {}", wgsl.text);
         assert!(report.lifted.is_ok(), "{name}");
-        assert!(!report.executors.is_empty(), "{name}");
+        // an executor is offered for what it runs: none runs a compute program yet
+        let compute = report.interface.as_ref().unwrap().stage == iridia_ir::interface::Stage::Compute;
+        assert_eq!(
+            report.executors.is_empty(),
+            compute,
+            "{name}: {:?}",
+            report.executors
+        );
         // the listing's instructions are tied to their bytes, where the bytecode is a token stream
         if report.format != Format::Dxil {
             let code = report.bytecode.instructions;

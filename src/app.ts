@@ -11,6 +11,8 @@ import { fromFile, guess, placeholder, type Pixels } from './gpu/textures';
 import { defaultFeed, type Feed, FEEDS } from './gpu/wgsl';
 import type { Executed, Io, Linked, Pins, Report, Request, Result, Specialised, Wgsl } from './types';
 import { err, ok } from './types';
+import { DX, IRIDIA, type Project } from './marks';
+import { inputsFromVertex, laneOf, SCREEN, screenQuadInputs, type Words } from './cpu';
 import { bytecodeView } from './views/bytecode';
 import { codePane } from './views/code';
 import { flowView } from './views/flow';
@@ -36,6 +38,9 @@ interface Prog extends Opened {
 
 const TABS = ['source', 'bytecode', 'interface', 'lift', 'specialise', 'flow', 'run'] as const;
 type Tab = (typeof TABS)[number];
+/** The project that does each tab's work: dx reads and lists the bytes, iridia lifts, specialises, analyses and runs. */
+const TAB_CREDIT: Partial<Record<Tab, Project>> = { bytecode: DX, lift: IRIDIA, specialise: IRIDIA, flow: IRIDIA, run: IRIDIA };
+
 const TAB_NAMES: Record<Tab, string> = {
   source: 'Source',
   bytecode: 'Bytecode',
@@ -78,6 +83,8 @@ export class Workspace {
   private mouse: [number, number] = [0.5, 0.5];
   private textures = new Map<number, Pixels>();
   private run: PixelRun | null = null;
+  /** Where a run without a GPU runs: a pixel of the screen quad, a thread, or a vertex of the mesh. */
+  private cpuAt = { x: SCREEN / 2, y: SCREEN / 2, vertex: 0 };
   private runError: string | null = null;
   /** What a run in progress reads back, for the Run tab and toast; null when none is running. */
   private running: string | null = null;
@@ -457,9 +464,11 @@ export class Workspace {
     this.side.replaceChildren(...parts);
   }
 
-  /** The tabs shown: Flow only where a program has analyses (they do not read IR programs yet). */
+  /** The tabs shown: Flow where a program has analyses (they read DXBC and DXIL programs), Run where something runs. */
   private tabs(): Tab[] {
-    return TABS.filter((t) => t !== 'flow' || this.progs.some((p) => ok(p.report.analyses)));
+    // Run where something runs: the GPU's readback, or without WebGPU a CPU executor
+    const runs = typeof preview !== 'string' || this.progs.some((p) => p.report.executors.length);
+    return TABS.filter((t) => (t !== 'flow' || this.progs.some((p) => ok(p.report.analyses))) && (t !== 'run' || runs));
   }
 
   private renderTabs(): void {
@@ -488,7 +497,9 @@ export class Workspace {
               },
             },
           },
+          TAB_CREDIT[t] ? h('img.tab-mark', { src: TAB_CREDIT[t]!.mark, alt: '', width: TAB_CREDIT[t]!.size[0], height: TAB_CREDIT[t]!.size[1] }) : null,
           TAB_NAMES[t],
+          TAB_CREDIT[t] ? h('span.visually-hidden', ` · by ${TAB_CREDIT[t]!.name}`) : null,
         ),
       ),
     );
@@ -550,10 +561,9 @@ export class Workspace {
 
   private runContent(): HTMLElement {
     const stage = stageOf(this.primary.report);
+    if (typeof preview === 'string') return this.cpuRunContent();
     const help =
-      typeof preview === 'string'
-        ? 'Run compares the GPU with iridia’s CPU executors, and this browser has no WebGPU. ' + preview
-        : stage === 'vertex' && this.progs.length === 1
+      stage === 'vertex' && this.progs.length === 1
           ? 'Click the mesh in the preview: the nearest vertex is drawn alone as a point, its outputs read back, and run by the CPU executors.'
           : stage === 'compute'
             ? 'Click the image in the preview: its texel is read back from the storage texture the GPU wrote.'
@@ -567,6 +577,8 @@ export class Workspace {
 
   private async startPreview(): Promise<void> {
     const r = this.primary.report;
+    // the CPU executors read the texture slots with or without a GPU: bound now, and to the GPU once it is there
+    this.bindTextures();
     if (r.refusal || !ok(r.wgsl)) {
       this.previewMessage.replaceChildren(h('div.error-box', h('strong', 'No preview: '), r.refusal?.message ?? err(r.wgsl) ?? 'no WGSL'));
       this.state('failed');
@@ -646,16 +658,19 @@ export class Workspace {
       if (this.shown === null) this.shown = wgsl.outputs.find((o) => o.location !== null)?.location ?? null;
       return { ...base, shown: this.shown, mode: 'vertex', vertex: this.program(p, 'vertex', wgsl, drawn.text), attributes: (m) => attributes(wgsl.inputs, p.report, m), feeds: [] };
     }
-    if (stage === 'pixel') {
-      const iface = p.report.interface!;
-      wgsl.inputs.forEach((io, k) => {
-        if (this.feeds[k]) return;
-        const label = iface.inputs[io.varying]?.label;
-        this.feeds[k] = label ? defaultFeed(label.name, label.index) : 'uv';
-      });
-      return { ...base, mode: 'pixel', pixel: this.program(p, 'pixel', wgsl, drawn.text), feeds: this.feeds };
-    }
+    if (stage === 'pixel') return { ...base, mode: 'pixel', pixel: this.program(p, 'pixel', wgsl, drawn.text), feeds: this.feedsOf(p, wgsl) };
     return `the preview draws vertex, pixel and compute programs; this is a ${stage} program`;
+  }
+
+  /** What of the mesh feeds each of a lone pixel program's inputs: its semantic's default, until changed. */
+  private feedsOf(p: Prog, wgsl: Wgsl): Feed[] {
+    const iface = p.report.interface!;
+    wgsl.inputs.forEach((io, k) => {
+      if (this.feeds[k]) return;
+      const label = iface.inputs[io.varying]?.label;
+      this.feeds[k] = label ? defaultFeed(label.name, label.index) : 'uv';
+    });
+    return this.feeds;
   }
 
   private async rebuild(): Promise<void> {
@@ -838,7 +853,7 @@ export class Workspace {
               const c = e?.outputs[i]?.[l];
               if (c === undefined) continue;
               all++;
-              if (v.gpu[i]?.[l] === c) same++;
+              if (v.gpu?.[i]?.[l] === c) same++;
             }
         });
         if (v.kind !== 'compute' && !v.covered) this.flash('No fragment there.');
@@ -851,6 +866,130 @@ export class Workspace {
       this.running = null;
       if (this.tab === 'run') this.renderTabs();
     }
+  }
+
+  // ---- runs without a GPU ----
+
+  /** The Run tab where there is no WebGPU: iridia's executors on inputs the page computes, with no GPU beside them. */
+  private cpuRunContent(): HTMLElement {
+    const p = this.primary;
+    const stage = stageOf(p.report);
+    const pair = this.progs.length === 2;
+    const number = (key: 'x' | 'y' | 'vertex', label: string, max: number) =>
+      h(
+        'label.inline',
+        `${label} `,
+        h('input.num', {
+          type: 'number',
+          min: '0',
+          max: String(max),
+          value: String(this.cpuAt[key]),
+          on: { change: (e: Event) => (this.cpuAt[key] = Math.min(max, Math.max(0, Math.trunc(Number((e.target as HTMLInputElement).value) || 0)))) },
+        }),
+      );
+    const count = meshOf(this.meshName).count;
+    const vertexWise = pair || stage === 'vertex';
+    const what = vertexWise
+      ? pair
+        ? `The vertex program runs at a vertex of the ${this.meshName}, and the pixel program on what it wrote there: what a pixel at that vertex receives.`
+        : `The vertex program runs at a vertex of the ${this.meshName}, on its position, normal, tangent, colour and texture coordinate.`
+      : stage === 'compute'
+        ? `The compute program runs one thread of the ${SCREEN} × ${SCREEN} image.`
+        : `The pixel program runs at a pixel of a ${SCREEN} × ${SCREEN} screen quad, on what the preview would feed it there.`;
+    const controls = h(
+      'div.toolbar.cpu-run',
+      vertexWise ? number('vertex', 'Vertex', count - 1) : [number('x', stage === 'compute' ? 'Thread x' : 'Pixel x', SCREEN - 1), number('y', 'y', SCREEN - 1)],
+      h('button.small', { type: 'button', on: { click: () => this.runCpu() } }, 'Run on the CPU'),
+    );
+    return h(
+      'div',
+      h('p.lede', 'Without WebGPU there is no GPU to compare with, so Run runs iridia’s CPU executors alone. ' + what),
+      controls,
+      runView(this.run, '', this.runError ?? undefined),
+    );
+  }
+
+  private runCpu(): void {
+    const p = this.primary;
+    const stage = stageOf(p.report);
+    this.runError = null;
+    try {
+      if (this.progs.length === 2) this.run = this.cpuPair();
+      else if (stage === 'vertex') this.run = this.cpuVertex(p);
+      else if (stage === 'compute') {
+        const iface = p.report.interface!;
+        const { x, y } = this.cpuAt;
+        const inputs = iface.inputs.map((v): Words => (/dispatchthreadid/i.test(v.label.name) ? [x, y, 0, 0] : [0, 0, 0, 0]));
+        this.run = { kind: 'compute', where: `Thread (${x}, ${y}, 0).`, lane: 0, iface, inputs, gpu: null, executed: this.execute(p, this.request(p, [inputs])), covered: true, inputsFrom: 'The thread’s IDs.' };
+      } else {
+        const iface = p.report.interface!;
+        const wgsl = ok(p.report.wgsl)!;
+        const { x, y } = this.cpuAt;
+        const lanes = screenQuadInputs(iface, wgsl.inputs, this.feedsOf(p, wgsl), x, y);
+        const lane = laneOf(x, y);
+        const quad = p.report.needs_quad;
+        this.run = {
+          kind: 'pixel',
+          where: `Pixel (${x}, ${y}) of the screen quad${quad ? `, lane ${lane} of its 2 × 2 quad: the program takes derivatives, so the executors run the whole quad` : ''}.`,
+          lane: quad ? lane : 0,
+          iface,
+          inputs: lanes[lane],
+          gpu: null,
+          executed: this.execute(p, this.request(p, quad ? lanes : [lanes[lane]])),
+          covered: true,
+          inputsFrom: 'Computed on the CPU: the screen quad’s values at that pixel, as the preview feeds them.',
+        };
+      }
+    } catch (e) {
+      this.run = null;
+      this.runError = `The run failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    this.renderTabs();
+  }
+
+  /** A lone vertex program at the chosen vertex of the mesh. */
+  private cpuVertex(p: Prog): PixelRun {
+    const iface = p.report.interface!;
+    const wgsl = ok(p.report.wgsl)!;
+    const inputs = this.vertexInputs(p, wgsl, this.cpuAt.vertex);
+    return { kind: 'vertex', where: `Vertex ${this.cpuAt.vertex} of the ${this.meshName}.`, lane: 0, iface, inputs, gpu: null, executed: this.execute(p, this.request(p, [inputs])), covered: true, inputsFrom: 'The mesh’s attributes at that vertex, by semantic.' };
+  }
+
+  /** The vertex program's interface inputs at vertex `vertex` of the mesh, by semantic. */
+  private vertexInputs(p: Prog, wgsl: Wgsl, vertex: number): Words[] {
+    const attrs = attributes(wgsl.inputs.filter((io) => io.location !== null), p.report, meshOf(this.meshName));
+    const inputs: Words[] = p.report.interface!.inputs.map(() => [0, 0, 0, 0]);
+    wgsl.inputs
+      .filter((io) => io.location !== null)
+      .forEach((io, k) => {
+        const a = attrs[k];
+        if (a && io.varying >= 0) inputs[io.varying] = Array.from(new Uint32Array(a.data, vertex * 16, 4)) as Words;
+      });
+    return inputs;
+  }
+
+  /** A pair: the vertex program at the chosen vertex, then the pixel program on what it wrote. */
+  private cpuPair(): PixelRun {
+    const [vs, ps] = this.progs;
+    const vsWgsl = this.linked ? ok(this.linked)?.wgsl : undefined;
+    if (!vsWgsl) throw new Error(`the pair does not link${this.linked ? `: ${err(this.linked)}` : ''}`);
+    const vsIface = vs.report.interface!;
+    const ran = this.execute(vs, this.request(vs, [this.vertexInputs(vs, vsWgsl, this.cpuAt.vertex)]));
+    const first = ran.map((e) => ok(e.lanes)?.[0]).find(Boolean);
+    if (!first) throw new Error(`the vertex program did not run: ${ran.map((e) => err(e.lanes)).filter(Boolean).join('; ')}`);
+    const iface = ps.report.interface!;
+    const inputs = inputsFromVertex(vsIface, first.outputs, iface, ok(ps.report.wgsl)!.inputs);
+    return {
+      kind: 'pixel',
+      where: `The pixel program where a pixel lands on vertex ${this.cpuAt.vertex} of the ${this.meshName}.`,
+      lane: 0,
+      iface,
+      inputs,
+      gpu: null,
+      executed: this.execute(ps, this.request(ps, [inputs])),
+      covered: true,
+      inputsFrom: 'What the vertex program wrote for that vertex, run on the CPU first.',
+    };
   }
 
   private execute(p: Prog, req: Request): Executed[] {

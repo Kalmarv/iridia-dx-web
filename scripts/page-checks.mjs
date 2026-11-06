@@ -1,4 +1,6 @@
-// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll]: the page's checks in Chrome.
+// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback]: the page's checks in
+// Chrome. In a Chrome without WebGPU (--disable-features=WebGPU: no adapter) run wording and fallback, and again with
+// --remove-gpu, which deletes navigator.gpu before the page loads (as in a browser with no WebGPU at all).
 //
 // - wording: no text the page shows, on any route or any tab of any example (with every constant pinned and a pixel
 //   run), names naga or says something is not yet done, unsupported or refused.
@@ -8,6 +10,8 @@
 //   region brings its line into the listing; at the start, middle and end of several examples, at desktop and phone
 //   widths and after a resize. A wheel over a pane scrolls that pane only, the page scrolls outside them, nothing
 //   scrolls back on its own, and the keyboard scrolls the focused listing.
+// - fallback (a Chrome without WebGPU): each example opens with a note in place of the preview, not an error; every
+//   tab shows its content with no error; Run runs the CPU executors and shows their outputs.
 import { cli, connect, examples, SETTLE } from './browser.mjs';
 
 const { page, flag, port } = cli('node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll]');
@@ -48,7 +52,7 @@ const viewport = async (width, height, mobile = false) => {
 
 // ---- wording ----
 
-const FORBIDDEN = /naga|not yet|unsupported|refused/i;
+const FORBIDDEN = /naga|not yet|unsupported|refused|not been generated|yet: /i;
 async function wording(ids) {
   const shown = () => b.call(`function () { return document.body.innerText; }`);
   const look = async (what) => {
@@ -57,9 +61,21 @@ async function wording(ids) {
     if (lines.length) fail(`wording · ${what}`, lines.slice(0, 4).map((l) => JSON.stringify(l.trim().slice(0, 160))).join(', '));
     else pass(`wording · ${what}`);
   };
+  // the Coverage link and route exist exactly where the build has the coverage table
+  const coverage = await b.call(`async function () {
+    const r = await fetch('./coverage.json', { method: 'HEAD', cache: 'no-store' });
+    return { table: r.ok, link: !!document.querySelector('a[href="#/coverage"]') };
+  }`);
+  if (coverage.table !== coverage.link) fail('wording · Coverage link', `the build ${coverage.table ? 'has' : 'has no'} coverage.json but the link is ${coverage.link ? 'shown' : 'hidden'}`);
+  else pass(`wording · Coverage link ${coverage.link ? 'shown, with its table' : 'hidden, with no table'}`);
   for (const hash of ['#/', '#/coverage']) {
     await route(hash);
     await look(hash);
+  }
+  if (!coverage.table) {
+    const heading = await b.call(`function () { return [...document.querySelectorAll('main h1')].map((e) => e.textContent).join(' | '); }`);
+    if (/coverage/i.test(heading)) fail('wording · #/coverage', `a Coverage page with no table: ${heading}`);
+    else pass('wording · #/coverage with no table opens the examples');
   }
   for (const ex of ids) {
     await route(`#/example/${ex}`);
@@ -75,8 +91,10 @@ async function wording(ids) {
         }`);
       }
       if (t === 'run') {
-        // a pixel run: a click at the middle of the preview
+        // a pixel run: a click at the middle of the preview, or without WebGPU the CPU run's button
         await b.call(`async function () {
+          const cpu = [...document.querySelectorAll('.tab-body button')].find((b) => b.textContent === 'Run on the CPU');
+          if (cpu) { cpu.click(); await new Promise((r) => setTimeout(r, 300)); return; }
           const c = document.querySelector('.workspace canvas');
           if (!c) return;
           const r = c.getBoundingClientRect();
@@ -90,6 +108,45 @@ async function wording(ids) {
         }`);
       }
       await look(`${ex} · ${t}`);
+    }
+  }
+}
+
+// ---- fallback ----
+
+async function fallback(ids) {
+  const gpu = await b.call(`async function () { return !!(navigator.gpu && (await navigator.gpu.requestAdapter().catch(() => null))); }`);
+  if (gpu) {
+    fail('fallback', 'this Chrome has a WebGPU adapter: start one with --disable-features=WebGPU');
+    return;
+  }
+  pass(`fallback · ${(await b.call(`function () { return 'gpu' in navigator; }`)) ? 'navigator.gpu with no adapter' : 'no navigator.gpu'}`);
+  for (const ex of ids) {
+    await route(`#/example/${ex}`);
+    const opened = await b.call(`function () {
+      const m = document.querySelector('.workspace .preview-message');
+      return { state: document.querySelector('.workspace')?.dataset.preview, note: !!m?.querySelector('.note-box'), error: m?.querySelector('.error-box')?.textContent ?? null, text: m?.textContent ?? '' };
+    }`);
+    if (opened.state !== 'none' || !opened.note || opened.error) fail(`fallback · ${ex} · preview`, `state ${opened.state}, ${opened.error ? `error: ${opened.error}` : `note: ${opened.note}`}`);
+    else pass(`fallback · ${ex} · a note in place of the preview`);
+    for (const t of await tabs()) {
+      await tab(t);
+      if (t === 'run') {
+        await b.call(`async function () {
+          [...document.querySelectorAll('.tab-body button')].find((b) => b.textContent === 'Run on the CPU')?.click();
+          await new Promise((r) => setTimeout(r, 300));
+        }`);
+      }
+      const r = await b.call(`function () {
+        const body = document.querySelector('.workspace .tab-body');
+        return { error: [...body.querySelectorAll('.error-box')].map((e) => e.textContent).join(' | '), length: body.innerText.trim().length, runCells: body.querySelectorAll('.run-table tbody td').length, columns: [...body.querySelectorAll('.run-table thead th')].map((t) => t.firstChild?.textContent) };
+      }`);
+      const what = `fallback · ${ex} · ${t}`;
+      if (r.error) fail(what, r.error.slice(0, 200));
+      else if (r.length < 20) fail(what, 'the tab is empty');
+      else if (t === 'run' && !r.runCells) fail(what, 'no CPU run shown');
+      else if (t === 'run' && r.columns.some((c) => /GPU/.test(c ?? ''))) fail(what, `a GPU column: ${r.columns}`);
+      else pass(`${what}${t === 'run' ? `: ${r.columns.slice(1).join(', ')}` : ''}`);
     }
   }
 }
@@ -335,9 +392,11 @@ async function wheelAndKeys(ex, label) {
   else pass(`${what}: ${k0.pane} -> ${k1.pane}`);
 }
 
+if (flag('--remove-gpu') !== undefined || process.argv.includes('--remove-gpu')) await b.send('Page.addScriptToEvaluateOnNewDocument', { source: 'delete Navigator.prototype.gpu;' });
 await b.open(page);
 const ids = await examples(b);
-const want = (s) => !only || only.includes(s);
+// fallback needs a Chrome without WebGPU: run only when asked for
+const want = (s) => (only ? only.includes(s) : s !== 'fallback');
 if (want('wording')) {
   await viewport(1400, 900);
   await wording(ids);
@@ -352,6 +411,10 @@ if (want('scroll')) {
   await viewport(390, 844, true);
   await scrollChecks(['plasma', 'lit-brick'], 'phone');
   await wheelAndKeys('plasma', 'phone');
+}
+if (want('fallback')) {
+  await viewport(1400, 900);
+  await fallback(ids);
 }
 if (want('progress')) {
   await viewport(1400, 900);

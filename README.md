@@ -1,4 +1,4 @@
-# iridia web demo
+# iridia + dx web demo
 
 A static page that runs iridia and dx in the browser as WebAssembly: drop a compiled shader (DXBC, DXIL or Direct3D 9)
 or open an example, and see its bytes, Microsoft-exact disassembly, reflection, the IR and WGSL iridia writes, a live
@@ -32,6 +32,16 @@ workspace's `data-preview` state: starting, building, ready, failed or none):
 node scripts/variants.mjs http://127.0.0.1:5173/ --cdp 9222     # every preview the toolbar reaches: no WebGPU error
 node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222  # wording, the loading bar, linked scrolling
 ```
+
+Without WebGPU the page keeps everything but the preview, and Run runs the CPU executors alone. Check that in a Chrome
+started with `--disable-features=WebGPU`, and again with `navigator.gpu` removed:
+
+```sh
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording --remove-gpu
+```
+
+The Coverage route is built in only where `docs/coverage/coverage.json` exists.
 
 ## Layout
 

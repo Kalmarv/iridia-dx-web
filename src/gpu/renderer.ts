@@ -94,12 +94,14 @@ export class Preview {
   onError: (message: string) => void = () => undefined;
 
   static async create(canvas: HTMLCanvasElement): Promise<Preview | string> {
-    if (!('gpu' in navigator) || !navigator.gpu) return 'This browser has no WebGPU, so there is no live preview. Everything else on the page works.';
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return 'WebGPU is present but gave no adapter (it may be off or blocked for this GPU), so there is no live preview.';
+    const rest = 'Everything else works here: the bytes and listing, the interface, the lift and its WGSL, specialising, and runs on the CPU in the Run tab.';
+    if (!('gpu' in navigator) || !navigator.gpu)
+      return `The live preview needs WebGPU, which this browser does not offer or has turned off. ${rest} For the preview, open the page in a recent Chrome, Edge or Safari, or in Firefox with WebGPU turned on.`;
+    const adapter = await navigator.gpu.requestAdapter().catch(() => null);
+    if (!adapter) return `This browser has WebGPU but found no graphics adapter to use (it can be turned off or blocked for this GPU), so there is no live preview. ${rest}`;
     const device = await adapter.requestDevice();
     const context = canvas.getContext('webgpu');
-    if (!context) return 'The canvas gave no WebGPU context, so there is no live preview.';
+    if (!context) return `The canvas gave no WebGPU context, so there is no live preview. ${rest}`;
     return new Preview(device, canvas, context);
   }
 

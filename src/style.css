@@ -111,11 +111,16 @@ input[type='color'] { width: 44px; height: 26px; padding: 0 2px; border: 1px sol
 .top { display: flex; align-items: center; gap: 18px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--bg-2); position: sticky; top: 0; z-index: 20; }
 .brand { font-weight: 750; font-size: 18px; color: var(--fg); display: flex; align-items: center; gap: 9px; letter-spacing: -0.02em; }
 .brand:hover { text-decoration: none; }
+.brands { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.plus { color: var(--fg-2); font-weight: 600; font-size: 16px; }
+.link-pair { color: var(--fg-2); white-space: nowrap; }
+.link-pair a { color: var(--fg); }
 .logo { height: 18px; width: auto; display: block; }
 .tagline { margin: 0; color: var(--fg-2); flex: 1; font-size: 13px; }
 .links { display: flex; align-items: center; gap: 14px; }
 .links a { color: var(--fg-2); }
-.progress { height: 2px; background: transparent; position: sticky; top: 49px; z-index: 19; overflow: hidden; }
+/* the loading bar is the header's bottom edge, whatever the header's height */
+.progress { height: 2px; background: transparent; position: absolute; left: 0; right: 0; bottom: -1px; overflow: hidden; pointer-events: none; }
 .progress.active { background: var(--line); }
 .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.15s; opacity: 0; }
 .progress.active .progress-bar { opacity: 1; }
@@ -136,7 +141,8 @@ body.dragging .drop-overlay { display: grid; }
 .dropzone { position: relative; border: 1.5px dashed var(--line); border-radius: 18px; padding: 44px 40px 36px; background: radial-gradient(1200px 300px at 10% 0%, var(--hl), transparent 60%), var(--bg-2); overflow: hidden; }
 .dropzone h1 { font-size: 30px; margin-bottom: 10px; }
 .dropzone p { max-width: 62ch; color: var(--fg-2); }
-.dropzone-art { position: absolute; right: 36px; top: 50%; translate: 0 -50%; width: 200px; height: auto; opacity: 0.85; pointer-events: none; user-select: none; }
+.dropzone-art { position: absolute; right: 36px; top: 50%; translate: 0 -50%; display: flex; align-items: center; gap: 22px; opacity: 0.85; pointer-events: none; user-select: none; }
+.dropzone-art img { height: 110px; width: auto; display: block; }
 body.dragging .dropzone { border-color: var(--accent); }
 .gallery { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .card { display: grid; align-content: start; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); color: var(--fg); height: 100%; transition: border-color 0.15s, transform 0.15s; }
@@ -144,7 +150,7 @@ body.dragging .dropzone { border-color: var(--accent); }
 .card-title { font-weight: 650; }
 .card-summary { color: var(--fg-2); font-size: 12.5px; }
 .card-art { height: 70px; border-radius: 7px; background: var(--bg-3); }
-.art-plasma { background: linear-gradient(120deg, #141a5a, #f2733a, #141a5a); }
+.art-plasma { background: linear-gradient(120deg, #d1d5ff, #68d3ee, #d1d5ff); }
 .art-lit-brick { background: repeating-linear-gradient(0deg, #b3a99a 0 3px, #9e4a33 3px 17px), #9e4a33; }
 .art-d3d9-pair { background: radial-gradient(circle at 40% 40%, #f0c890, #6a4a2a 70%); }
 .art-toon { background: linear-gradient(180deg, #6aa8e8 0 45%, #4c8a38 45%); }
@@ -209,7 +215,8 @@ legend { padding: 0 4px; font-size: 12.5px; color: var(--fg-2); }
 
 /* tabs */
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin; }
-.tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--fg-2); padding: 8px 12px; }
+.tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--fg-2); padding: 8px 12px; display: inline-flex; align-items: center; gap: 6px; }
+.tab-mark { height: 12px; width: auto; display: block; opacity: 0.9; }
 .tab[aria-selected='true'] { color: var(--fg); border-bottom-color: var(--accent); }
 .tab-body { padding-top: 12px; min-height: 60vh; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

@@ -1,21 +1,18 @@
 // The page: a header, the routes (#/ the examples and the drop zone, #/example/<id>, #/file for a dropped file,
 // #/coverage), the drag-and-drop over the whole window and the glue's lazy load.
-// the mark the README shows: docs/logo.svg itself, so the two stay the same
-import logo from '../../docs/logo.svg?url';
 import './style.css';
 import { type Opened, Workspace, fetchExample } from './app';
 import { coverageView } from './coverage';
 import { h, plural } from './dom';
 import { byId, EXAMPLES } from './examples';
+import { DX, IRIDIA, type Project } from './marks';
 import type { Report } from './types';
 import { glue, onProgress } from './wasm';
 
-const REPO = 'https://github.com/Kalmarv/iridia';
-const CRATES = 'https://crates.io/crates/iridia';
 
 const app = document.getElementById('app')!;
 const main = h('main#main', { tabIndex: -1 });
-const progress = h('div.progress', { role: 'progressbar', 'aria-label': 'loading iridia', 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('div.progress-bar'));
+const progress = h('div.progress', { role: 'progressbar', 'aria-label': 'loading iridia and dx', 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('div.progress-bar'));
 const dropOverlay = h('div.drop-overlay', { 'aria-hidden': 'true' }, h('div', h('strong', 'Drop to open'), h('span', 'a compiled shader (.cso .fxo .vso .pso .dxbc .dxil), or a vertex and a pixel program together')));
 let workspace: Workspace | null = null;
 let dropped: Opened[] | null = null;
@@ -43,21 +40,29 @@ function themeButton(): HTMLElement {
   return b;
 }
 
+/** A project's mark and name, linking to its repository. */
+const brand = (p: Project) => h('a.brand', { href: p.repo, rel: 'noopener', title: `${p.name} on GitHub` }, h('img.logo', { src: p.mark, alt: '', width: p.size[0], height: p.size[1] }), p.name);
+/** `label`, then a link to each project's page of it: `GitHub iridia · dx`. */
+const both = (label: string, href: (p: Project) => string) =>
+  h('span.link-pair', `${label} `, h('a', { href: href(IRIDIA), rel: 'noopener' }, 'iridia'), h('span.dim', ' · '), h('a', { href: href(DX), rel: 'noopener' }, 'dx'));
+
 const header = h(
   'header.top',
-  h('a.brand', { href: '#/' }, h('img.logo', { src: logo, alt: '', width: 91, height: 80 }), 'iridia'),
-  h('p.tagline', 'iridia reads compiled Direct3D shaders and lifts them into programs other tools can read, write and run. Here it runs in your browser.'),
+  h('div.brands', brand(IRIDIA), h('span.plus', { 'aria-hidden': 'true' }, '+'), brand(DX)),
+  h('p.tagline', 'dx reads Direct3D shader containers and writes Microsoft-exact listings; iridia lifts them into programs it can transform, specialise and run. Both run here, in your browser.'),
   h(
     'nav.links',
-    h('a', { href: '#/coverage' }, 'Coverage'),
-    h('a', { href: REPO, rel: 'noopener' }, 'GitHub'),
-    h('a', { href: CRATES, rel: 'noopener' }, 'crates.io'),
+    h('a', { href: '#/' }, 'Examples'),
+    __COVERAGE__ ? h('a', { href: '#/coverage' }, 'Coverage') : null,
+    both('GitHub', (p) => p.repo),
+    both('crates.io', (p) => p.crates),
     h('label.button.small', { htmlFor: 'open-file' }, 'Open…'),
     h('input.visually-hidden#open-file', { type: 'file', multiple: true, accept: '.cso,.fxo,.vso,.pso,.dxbc,.dxil,.bin,.fxc,.obj', on: { change: (e: Event) => openFiles([...((e.target as HTMLInputElement).files ?? [])]) } }),
     themeButton(),
   ),
 );
-app.append(header, progress, main, dropOverlay);
+header.append(progress);
+app.append(header, main, dropOverlay);
 
 const bar = progress.firstChild as HTMLElement;
 onProgress((loaded, total) => {
@@ -96,7 +101,7 @@ function home(): HTMLElement {
     h(
       'section.dropzone',
       { 'aria-label': 'open a shader' },
-      h('img.dropzone-art', { src: logo, alt: '', width: 91, height: 80 }),
+      h('div.dropzone-art', { 'aria-hidden': 'true' }, [IRIDIA, DX].map((p) => h('img', { src: p.mark, alt: '', width: p.size[0], height: p.size[1] }))),
       h('h1', 'Drop a compiled shader'),
       h('p', 'DXBC (Shader Model 4 and 5), DXIL (6.x) or a Direct3D 9 token stream (1.1 to 3.0): .cso, .fxo, .vso, .pso or a container. Drop a vertex and a pixel program together to link them.'),
       h('p', pick, h('span.dim', ' · nothing leaves your machine: it all runs here, in WebAssembly and WebGPU.')),
@@ -181,7 +186,7 @@ async function route(): Promise<void> {
   const id = ++routeId;
   const hash = location.hash.replace(/^#\/?/, '');
   const [kind, arg] = hash.split('/');
-  document.title = 'iridia · compiled shaders in the browser';
+  document.title = 'iridia + dx · compiled shaders in the browser';
   if (kind === 'example' && arg) {
     const ex = byId(arg);
     if (!ex) return show(failure('No such example', `There is no example named “${arg}”.`));
@@ -193,7 +198,7 @@ async function route(): Promise<void> {
       workspace?.destroy();
       workspace = new Workspace(opened, sources, ex);
       main.replaceChildren(workspace.el);
-      document.title = `${ex.title} · iridia`;
+      document.title = `${ex.title} · iridia + dx`;
     } catch (e) {
       if (id === routeId) show(failure(`${ex.title} did not open`, e instanceof Error ? e.message : String(e)));
     }
@@ -207,11 +212,11 @@ async function route(): Promise<void> {
     main.replaceChildren(workspace.el);
     return;
   }
-  if (kind === 'coverage') {
+  if (kind === 'coverage' && __COVERAGE__) {
     show(loading('Reading the coverage table…'));
     const el = await coverageView();
     if (id === routeId) show(el);
-    document.title = 'Coverage · iridia';
+    document.title = 'Coverage · iridia + dx';
     return;
   }
   show(home());

@@ -400,6 +400,11 @@ impl NagaProgram {
         }
     }
 
+    /// Whether `iridia-exec` runs the program: it runs pixel and vertex programs.
+    pub fn runs(&self) -> bool {
+        matches!(self.program.stage, Stage::Pixel | Stage::Vertex)
+    }
+
     /// Whether a run of the program must be a quad's.
     pub fn needs_quad(&self) -> bool {
         iridia_exec::ProgramShader::new(self.program.clone()).is_ok_and(|s| s.needs_quad())

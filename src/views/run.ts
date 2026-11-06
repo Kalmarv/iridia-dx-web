@@ -15,8 +15,10 @@ export interface PixelRun {
   iface: Interface;
   /** The interface inputs given to the executors, by index. */
   inputs: Words[];
-  /** The GPU's value of each interface output, by index (null where it wrote none to read). */
-  gpu: (Words | null)[];
+  /** The GPU's value of each interface output, by index (null where it wrote none to read); null for a run with no GPU. */
+  gpu: (Words | null)[] | null;
+  /** Where the inputs came from, where not read back from the GPU. */
+  inputsFrom?: string;
   gpuNote?: string;
   executed: Executed[];
   covered: boolean;
@@ -40,14 +42,14 @@ function show(w: number | undefined, scalar: string): string {
   return String(w >>> 0);
 }
 
-function cell(w: number | undefined, ref: number | undefined, scalar: string): HTMLElement {
+function cell(w: number | undefined, ref: number | undefined, scalar: string, against = 'the GPU'): HTMLElement {
   const text = show(w, scalar);
   if (w === undefined || ref === undefined) return h('td.mono', text);
   const same = w >>> 0 === ref >>> 0;
   const d = scalar === 'float' && !same ? ulps(w, ref) : 0;
   return h(
     `td.mono.${same ? 'eq' : d <= 4 ? 'near' : 'ne'}`,
-    { title: `${hex(w >>> 0)}${same ? ' · the same bits as the GPU' : scalar === 'float' ? ` · ${d} ulp from the GPU` : ' · differs from the GPU'}` },
+    { title: `${hex(w >>> 0)}${same ? ` · the same bits as ${against}` : scalar === 'float' ? ` · ${d} ulp from ${against}` : ` · differs from ${against}`}` },
     text,
     same ? h('span.mark', ' =') : h('span.mark', scalar === 'float' ? ` ${d} ulp` : ' ≠'),
   );
@@ -58,11 +60,13 @@ export function runView(r: PixelRun | null, help: string, error?: string, runnin
   if (error) return h('div.run', h('div.error-box', error));
   if (!r) return h('div.run', h('p.lede', help));
   const exec = r.executed.map((e) => ({ e, lane: ok(e.lanes)?.[r.lane] ?? null, why: err(e.lanes) }));
+  const gpu = r.gpu;
+  if (gpu === null) return cpuOnly(r, exec);
   const rows: HTMLElement[] = [];
   let all = 0;
   let equal = 0;
   r.iface.outputs.forEach((v, o) => {
-    const g = r.gpu[o] ?? null;
+    const g = gpu[o] ?? null;
     for (let l = 0; l < v.value.width; l++) {
       const gw = g?.[l];
       const cpu = exec.map((x) => x.lane?.outputs[o]?.[l]);
@@ -92,8 +96,14 @@ export function runView(r: PixelRun | null, help: string, error?: string, runnin
     ),
     r.gpuNote ? h('p.note', r.gpuNote) : null,
     exec.filter((x) => x.why).map((x) => h('div.error-box', h('strong', `${x.e.executor}: `), x.why)),
+    inputsTable(r, r.inputsFrom ?? 'Read back from the GPU: what the pixel program received there, bit for bit.'),
+  );
+}
+
+function inputsTable(r: PixelRun, from: string): HTMLElement[] {
+  return [
     h('h3', 'Inputs given to the executors'),
-    h('p.dim', 'Read back from the GPU: what the pixel program received there, bit for bit.'),
+    h('p.dim', from),
     h(
       'table.data',
       h('thead', h('tr', h('th', 'Input'), h('th', 'x'), h('th', 'y'), h('th', 'z'), h('th', 'w'))),
@@ -102,6 +112,40 @@ export function runView(r: PixelRun | null, help: string, error?: string, runnin
         r.iface.inputs.map((v, i) => h('tr', h('td.mono', `${v.label.name}${v.label.index}`), ...[0, 1, 2, 3].map((l) => h('td.mono', l < v.value.width ? show(r.inputs[i]?.[l], v.value.scalar) : '')))),
       ),
     ),
+  ];
+}
+
+type Lane = { e: Executed; lane: { outputs: (Words | null)[]; killed: boolean } | null; why: string | undefined };
+
+/** A run with no GPU beside it: each executor's outputs, the second compared with the first where there are two. */
+function cpuOnly(r: PixelRun, exec: Lane[]): HTMLElement {
+  const rows: HTMLElement[] = [];
+  let all = 0;
+  let equal = 0;
+  r.iface.outputs.forEach((v, o) => {
+    for (let l = 0; l < v.value.width; l++) {
+      const cpu = exec.map((x) => x.lane?.outputs[o]?.[l]);
+      const first = cpu[0];
+      if (cpu.length > 1 && cpu[1] !== undefined && first !== undefined) {
+        all++;
+        if (cpu[1] >>> 0 === first >>> 0) equal++;
+      }
+      rows.push(h('tr', h('td.mono', `${v.label.name}${v.label.index}.${LANES[l]}`), ...cpu.map((c, i) => (i === 0 ? h('td.mono', show(c, v.value.scalar)) : cell(c, first, v.value.scalar, 'B')))));
+    }
+  });
+  const killed = exec.filter((x) => x.lane?.killed).map((x) => x.e.executor);
+  return h(
+    'div.run',
+    h('p', r.where),
+    all ? h(`p.verdict.${equal === all ? 'eq' : 'near'}`, equal === all ? 'Both CPU executors give the same bits.' : `${equal} of ${all} lanes have the same bits in both CPU executors.`) : null,
+    killed.length ? h('p', `Discarded by ${killed.join(' and ')}.`) : null,
+    h(
+      'table.data.run-table',
+      h('thead', h('tr', h('th', 'Output lane'), ...exec.map((x) => h('th', x.e.executor, h('div.dim.small', x.e.runs))))),
+      h('tbody', rows),
+    ),
+    exec.filter((x) => x.why).map((x) => h('div.error-box', h('strong', `${x.e.executor}: `), x.why)),
+    inputsTable(r, r.inputsFrom ?? ''),
   );
 }
 

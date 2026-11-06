@@ -114,7 +114,6 @@ export async function coverageView(): Promise<HTMLElement> {
   let data: Coverage;
   try {
     const r = await fetch('./coverage.json');
-    if (r.status === 404) return h('div.page', h('h1', 'Coverage'), h('p.lede', 'The coverage table has not been generated yet: tools/coverage writes docs/coverage/coverage.json, and the page shows it here.'));
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
     data = await r.json();
   } catch (e) {
