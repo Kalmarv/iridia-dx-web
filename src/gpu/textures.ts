@@ -73,11 +73,6 @@ const makers: Record<TextureKind, () => Pixels> = {
       const c = (Math.floor(u * 8) + Math.floor(v * 8)) % 2 ? 0.85 : 0.25;
       return [c, c, c, 1];
     }),
-  grid: () =>
-    draw('grid', (u, v) => {
-      const line = Math.min(Math.abs(((u * 8) % 1) - 0.5), Math.abs(((v * 8) % 1) - 0.5)) > 0.46;
-      return line ? [0.15, 0.15, 0.18, 1] : [0.9, 0.88, 0.84, 1];
-    }),
   brick: () =>
     draw('brick', (u, v) => {
       const hgt = brickHeight(u, v);

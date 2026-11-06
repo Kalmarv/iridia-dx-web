@@ -1,9 +1,9 @@
-// The page's examples: our own HLSL (or assembly), compiled by fxc, dxc or D3DAssemble (web/examples/build.sh). Each
+// The page's examples: our own HLSL (or assembly), compiled by fxc, dxc or D3DAssemble (examples/build.sh). Each
 // names how the preview draws it and the textures, presets and pipeline state the page binds.
 
 export type View = 'quad' | 'mesh' | 'compute';
 export type MeshName = 'plane' | 'cube' | 'sphere' | 'torus' | 'knot';
-export type TextureKind = 'checker' | 'brick' | 'brick-normal' | 'scene' | 'hdr-scene' | 'ripple' | 'marble' | 'grid';
+export type TextureKind = 'checker' | 'brick' | 'brick-normal' | 'scene' | 'hdr-scene' | 'ripple' | 'marble';
 
 export interface Example {
   id: string;
@@ -118,7 +118,7 @@ export const EXAMPLES: Example[] = [
     sources: [{ name: 'pbr.hlsl', path: 'pbr-dxil/pbr.hlsl' }],
     view: 'mesh',
     mesh: 'sphere',
-    textures: { 0: { kind: 'grid' } },
+    textures: { 0: { kind: 'marble' } },
     presets: {
       baseColor: [0.95, 0.64, 0.54],
       roughness: [0.35],
