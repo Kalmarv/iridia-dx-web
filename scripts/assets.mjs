@@ -19,7 +19,7 @@ for (const folder of readdirSync(from)) {
     cpSync(join(source, file), join(to, folder, file));
   }
 }
-const coverage = join(web, '..', 'docs', 'coverage', 'coverage.json');
+const coverage = join(web, 'coverage', 'coverage.json');
 const coverageOut = join(web, 'public', 'coverage.json');
 rmSync(coverageOut, { force: true });
 if (existsSync(coverage)) cpSync(coverage, coverageOut);

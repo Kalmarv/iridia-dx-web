@@ -1,7 +1,7 @@
-// The two projects' marks, the files their READMEs show: iridia's docs/logo.svg itself, and a copy of dx's
-// docs/logo.svg (Kalmarv/dx 4c2de56; replace the copy when dx's changes).
+// The two projects' marks, the files their READMEs show: copies of iridia's docs/logo.svg (Kalmarv/iridia
+// 054339a) and dx's docs/logo.svg (Kalmarv/dx 4c2de56); replace a copy when its project's changes.
 import dxMark from './assets/dx-logo.svg?url';
-import iridiaMark from '../../docs/logo.svg?url';
+import iridiaMark from './assets/iridia-logo.svg?url';
 
 export interface Project {
   name: string;

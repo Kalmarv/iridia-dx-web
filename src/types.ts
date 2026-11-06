@@ -1,4 +1,4 @@
-// The glue's JSON (web/glue/src): what `Shader.report()`, `specialise()`, `execute()` and `link()` hand back.
+// The glue's JSON (glue/src): what `Shader.report()`, `specialise()`, `execute()` and `link()` hand back.
 
 export type Result<T> = { Ok: T } | { Err: string };
 

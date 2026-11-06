@@ -1,5 +1,5 @@
 // The coverage route: what iridia decodes, lists, lifts, writes and runs, by feature and by public test suite, from
-// docs/coverage/coverage.json (tools/coverage writes it, schema version 1; the page's build copies it beside the page).
+// coverage/coverage.json (iridia's tools/coverage writes it, schema version 1; the page's build copies it beside the page).
 import { h, plural } from './dom';
 
 interface Counts { [k: string]: number }

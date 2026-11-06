@@ -1,4 +1,4 @@
-//! The page's examples (`web/examples`), each as the page reads it: its listing byte for byte the one Microsoft's tools
+//! The page's examples (`examples/`), each as the page reads it: its listing byte for byte the one Microsoft's tools
 //! wrote beside it, its report, and the Direct3D 9 pair linked.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
