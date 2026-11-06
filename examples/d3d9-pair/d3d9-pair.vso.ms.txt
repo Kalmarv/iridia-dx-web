@@ -3,7 +3,9 @@
 //
 // Parameters:
 //
+//   float3 eyePosition;
 //   float3 groundColor;
+//   float3 lightColor;
 //   float3 lightDirection;
 //   float3 skyColor;
 //   float uvScale;
@@ -17,21 +19,24 @@
 //   ------------------- ----- ----
 //   worldViewProjection c0       4
 //   world               c4       3
-//   lightDirection      c7       1
-//   skyColor            c8       1
-//   groundColor         c9       1
-//   uvScale             c10      1
+//   eyePosition         c7       1
+//   lightDirection      c8       1
+//   lightColor          c9       1
+//   skyColor            c10      1
+//   groundColor         c11      1
+//   uvScale             c12      1
 //
 
     vs_3_0
-    def c11, 0.5, 1, 0, 0
+    def c13, 0.5, 1, 0, 0
     dcl_position v0
     dcl_normal v1
     dcl_texcoord v2
     dcl_position o0
     dcl_texcoord o1.xy
     dcl_texcoord1 o2.xyz
-    dcl_color o3
+    dcl_texcoord2 o3.xyz
+    dcl_color o4
     dp4 o0.x, v0, c0
     dp4 o0.y, v0, c1
     dp4 o0.z, v0, c2
@@ -40,15 +45,19 @@
     dp3 r0.y, v1, c5
     dp3 r0.z, v1, c6
     nrm r1.xyz, r0
-    mad r0.x, r1.y, c11.x, c11.x
-    mov r2.xyz, c9
-    add r0.yzw, -r2.xxyz, c8.xxyz
-    mad r0.xyz, r0.x, r0.yzww, c9
-    nrm r2.xyz, c7
+    mad r0.x, r1.y, c13.x, c13.x
+    mov r2.xyz, c11
+    add r0.yzw, -r2.xxyz, c10.xxyz
+    mad r0.xyz, r0.x, r0.yzww, c11
+    nrm r2.xyz, c8
     dp3_sat r0.w, r1, r2
     mov o2.xyz, r1
-    add o3.xyz, r0.w, r0
-    mul o1.xy, c10.x, v2
-    mov o3.w, c11.y
+    mad o4.xyz, c9, r0.w, r0
+    mul o1.xy, c12.x, v2
+    dp4 r0.x, v0, c4
+    dp4 r0.y, v0, c5
+    dp4 r0.z, v0, c6
+    add o3.xyz, -r0, c7
+    mov o4.w, c13.y
 
-// approximately 22 instruction slots used
+// approximately 26 instruction slots used

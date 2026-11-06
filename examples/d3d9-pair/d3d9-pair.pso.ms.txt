@@ -21,17 +21,17 @@
     def c2, 1, 0, 0, 0
     dcl_texcoord v0.xy
     dcl_texcoord1 v1.xyz
-    dcl_color v2.xyz
+    dcl_texcoord2 v2.xyz
+    dcl_color v3.xyz
     dcl_2d s0
-    dp3 r0.x, v1, v1
-    rsq r0.x, r0.x
-    mul r0.x, r0.x, v1.z
-    abs_sat r0.x, r0.x
+    nrm r0.xyz, v1
+    nrm r1.xyz, v2
+    dp3_sat r0.x, r0, r1
     add r0.x, -r0.x, c2.x
     pow r1.x, r0.x, c1.x
     mul r0.xyz, r1.x, c0
     texld r1, v0, s0
-    mad oC0.xyz, r1, v2, r0
+    mad oC0.xyz, r1, v3, r0
     mov oC0.w, c2.x
 
-// approximately 12 instruction slots used (1 texture, 11 arithmetic)
+// approximately 15 instruction slots used (1 texture, 14 arithmetic)
