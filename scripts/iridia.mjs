@@ -15,3 +15,14 @@ export function iridiaRev() {
   if (revs.size !== 1) throw new Error(`glue/Cargo.toml pins iridia at ${revs.size ? [...revs].join(', ') : 'no full rev'}; expected one`);
   return [...revs][0];
 }
+
+/** The version of iridia that glue/Cargo.lock builds at the pinned rev. */
+export function iridiaVersion() {
+  const lock = readFileSync(join(web, 'glue', 'Cargo.lock'), 'utf8');
+  const m = lock.match(/name = "iridia"\nversion = "([^"]+)"/);
+  if (!m) throw new Error('glue/Cargo.lock has no iridia package');
+  return m[1];
+}
+
+/** Where scripts/assets.mjs writes whether that version is on crates.io, for vite.config.ts to build in. */
+export const releaseFile = (rev) => join(web, 'coverage', `${rev}.release.json`);

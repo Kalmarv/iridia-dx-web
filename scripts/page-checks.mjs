@@ -6,9 +6,10 @@
 // - wording: no text the page shows, on the examples route or any tab of any example (with every constant pinned and a
 //   pixel run), names naga or says something is not yet done, unsupported or refused. The Coverage route is iridia's
 //   table, whose outcomes are those words; the coverage check reads it instead.
-// - coverage: the route shows the iridia commit the glue pins, iridia's version and dx's; each suite's totals are the
-//   table's, and they are its selected runs alone (the extended ones apart); every run names its format; every
-//   outcome has its mark and label; every row but a pass gives its reason; the feature and run filters work from the keyboard alone (Tab, Space, Enter, typing) and pick exactly
+// - coverage: the route shows the iridia commit the glue pins, iridia's version (by its commit, as unreleased, where
+//   crates.io lacks it) and dx's; each suite's totals are the table's, and they are its selected runs alone (the
+//   extended ones apart); every run names its format; every outcome has its mark and label; every row but a pass gives
+//   its reason; the feature and run filters work from the keyboard alone (Tab, Space, Enter, typing) and pick exactly
 //   the rows the table holds for them. It needs no WebGPU: run it in the fallback Chromes too.
 // - dropped: the glue's test programs a browser cannot draw, opened as a visitor opens a file: an amplification program
 //   (WebGPU has no such stage) is listed and lifted, with a note in place of the preview and no Run tab; a pixel program
@@ -201,7 +202,10 @@ async function coverage() {
   const graded = await b.call(`function () { return document.querySelector('.coverage .graded-note')?.textContent ?? ''; }`);
   check(table.graded ? 'the table names the path it grades' : 'a table naming no graded path is said to grade the older lift', table.graded ? !graded : /older lift/.test(graded), graded || 'no note');
   const lede = await b.call(`function () { return document.querySelector('.coverage .lede')?.textContent ?? ''; }`);
-  check(`names iridia ${table.iridia} and dx’s ${table.dx}`, lede.includes(`iridia ${table.iridia}`) && lede.includes(table.dx), lede);
+  // iridia by its version where crates.io has it, else by the commit, as unreleased (asked here as the build asks)
+  const onCrates = (await fetch(`https://crates.io/api/v1/crates/iridia/${table.iridia}`, { headers: { 'User-Agent': 'iridia-dx-web page-checks (https://github.com/Kalmarv/iridia-dx-web)' } })).status === 200;
+  const named = onCrates ? `iridia ${table.iridia} at commit ${rev.slice(0, 7)}` : `iridia at ${rev.slice(0, 7)} (unreleased)`;
+  check(`names ${named} and dx’s ${table.dx}`, lede.includes(named) && lede.includes(table.dx) && (onCrates || !lede.includes(table.iridia)), lede);
   for (const s of table.suites) {
     const selected = s.rows.filter((r) => r.selected !== false);
     check(`${s.id} · totals are the table's selected runs (${selected.length} of ${s.rows.length})`, same(tally(selected), s.totals), `rows ${JSON.stringify(tally(selected))}, totals ${JSON.stringify(s.totals)}`);

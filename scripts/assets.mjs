@@ -1,9 +1,10 @@
 // Copies what the page fetches at run time into public/: each example's program and source (not Microsoft's
 // reference listings, which are for the glue's tests), and iridia's coverage table at the commit the glue pins
-// (fetched once into coverage/, which git ignores; a build without it fails rather than ship a page without it).
+// (fetched once into coverage/, which git ignores; a build without it fails rather than ship a page without it), and
+// whether the iridia version it builds is released on crates.io.
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { iridiaRev, web } from './iridia.mjs';
+import { iridiaRev, iridiaVersion, releaseFile, web } from './iridia.mjs';
 
 const from = join(web, 'examples');
 const to = join(web, 'public', 'examples');
@@ -32,3 +33,10 @@ if (!existsSync(coverage)) {
   renameSync(`${coverage}.part`, coverage);
 }
 cpSync(coverage, join(web, 'public', 'coverage.json'));
+
+// whether the iridia version the pin builds is on crates.io: the page names an unreleased one by its commit. Asked on
+// every build (a release can come after the pin), and a build that cannot ask fails rather than guess.
+const version = iridiaVersion();
+const asked = await fetch(`https://crates.io/api/v1/crates/iridia/${version}`, { headers: { 'User-Agent': 'iridia-dx-web build (https://github.com/Kalmarv/iridia-dx-web)' } });
+if (asked.status !== 200 && asked.status !== 404) throw new Error(`crates.io on iridia ${version}: ${asked.status} ${asked.statusText}`);
+writeFileSync(releaseFile(rev), JSON.stringify({ rev, version, released: asked.status === 200 }));

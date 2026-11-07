@@ -1,6 +1,6 @@
 // The coverage route: what dx and iridia do with each bytecode construct and with each run of two public shader test
 // suites, from iridia's coverage table (schema version 1, written by its `iridia-coverage table`) at the commit the
-// glue pins. scripts/assets.mjs fetches it into the build as coverage.json; __IRIDIA_REV__ names that commit.
+// glue pins. scripts/assets.mjs fetches it into the build as coverage.json; __IRIDIA__ names that commit.
 import { append, h, plural } from './dom';
 
 interface Counts { [k: string]: number }
@@ -30,9 +30,15 @@ interface Suite {
 }
 interface Coverage { version: number; iridia: string; dx: string; graded?: unknown; features: Feature[]; suites: Suite[] }
 
+const IRIDIA = 'https://github.com/Kalmarv/iridia';
+/** A link to the iridia commit the page is built from, by its short sha. */
+const iridiaCommit = (): HTMLElement => h('a.mono', { href: `${IRIDIA}/commit/${__IRIDIA__.rev}`, rel: 'noopener' }, __IRIDIA__.rev.slice(0, 7));
+/** iridia's `version` as the page says it: by number where crates.io has it, else `at <commit> (unreleased)`. */
+const iridiaNamed = (version: string): (HTMLElement | string)[] =>
+  version === __IRIDIA__.version && !__IRIDIA__.released ? ['iridia at ', iridiaCommit(), ' (unreleased)'] : [`iridia ${version} at commit `, iridiaCommit()];
+
 const SUPPORTED = 1;
 const ROWS_SHOWN = 400;
-const IRIDIA = 'https://github.com/Kalmarv/iridia';
 
 /** Each outcome's mark, label and meaning: the mark and label say it, the colour only repeats it. */
 const OUTCOMES: Record<string, { mark: string; label: string; means: string }> = {
@@ -265,8 +271,7 @@ export async function coverageView(): Promise<HTMLElement> {
   }
   if (data.version !== SUPPORTED)
     return h('div.page', h('h1', 'Coverage'), h('div.error-box', `The coverage table is schema version ${data.version}; this page reads version ${SUPPORTED}.`));
-  const rev = __IRIDIA_REV__;
-  const table = `${IRIDIA}/blob/${rev}/docs/coverage`;
+  const table = `${IRIDIA}/blob/${__IRIDIA__.rev}/docs/coverage`;
   return h(
     'div.page.coverage',
     h('h1', 'Coverage'),
@@ -274,9 +279,9 @@ export async function coverageView(): Promise<HTMLElement> {
       'p.lede',
       'What dx and iridia do with the programs of two public shader test suites: each run of their tests, and each bytecode construct those programs use. From ',
       h('a', { href: `${table}/coverage.md`, rel: 'noopener' }, 'iridia’s coverage table'),
-      ` (iridia ${data.iridia}, dx’s ${data.dx}) at commit `,
-      h('a.mono', { href: `${IRIDIA}/commit/${rev}`, rel: 'noopener' }, rev.slice(0, 7)),
-      ', the commit this page’s iridia is built from.',
+      ', made by ',
+      iridiaNamed(data.iridia),
+      `, the iridia this page is built from, with dx’s ${data.dx}.`,
     ),
     // tables of schema version 1 that name no graded path grade iridia's older lift (iridia_dxbc::lift and
     // iridia_dxil::lift, WGSL from iridia::emit), not the IR path the page's other views use
