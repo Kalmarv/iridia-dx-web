@@ -32,7 +32,8 @@ fn compiled() -> Vec<PathBuf> {
 }
 
 fn open(path: &Path) -> Shader {
-    Shader::open(std::fs::read(path).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    Shader::open(std::fs::read(path).unwrap(), iridia_web::ir::profile(&[]))
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
 #[test]
@@ -210,9 +211,13 @@ fn a_link_is_a_vertex_program_feeding_a_pixel_program_of_its_generation() {
 
 #[test]
 fn bytes_that_are_no_shader_are_refused_as_such() {
-    let e = Shader::open(b"PNG\r\n\x1a\n not a shader".to_vec()).unwrap_err();
+    let e = Shader::open(
+        b"PNG\r\n\x1a\n not a shader".to_vec(),
+        iridia_web::ir::profile(&[]),
+    )
+    .unwrap_err();
     assert!(e.contains("not a compiled Direct3D shader"), "{e}");
-    let e = Shader::open(b"DXBC truncated".to_vec()).unwrap_err();
+    let e = Shader::open(b"DXBC truncated".to_vec(), iridia_web::ir::profile(&[])).unwrap_err();
     assert!(e.contains("DXBC container"), "{e}");
 }
 

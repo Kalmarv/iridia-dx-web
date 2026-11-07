@@ -103,17 +103,18 @@ fn refused(r: &iridia_ir::Refusal, code_base: usize) -> Refused {
 }
 
 impl Shader {
-    /// Read `bytes`: what they are and their lifts. Only bytes that are no compiled Direct3D shader are an error.
-    pub fn open(bytes: Vec<u8>) -> Result<Shader, String> {
+    /// Read `bytes`: what they are and their lifts, the WGSL written for `profile` ([`ir::profile`]). Only bytes that
+    /// are no compiled Direct3D shader are an error.
+    pub fn open(bytes: Vec<u8>, profile: iridia_naga::Profile) -> Result<Shader, String> {
         let format = Format::of(&bytes)?;
         let (ir, naga) = match format {
-            Format::D3d9 => (IrProgram::d3d9(&bytes), None),
+            Format::D3d9 => (IrProgram::d3d9(&bytes, profile), None),
             Format::Dxbc => (
-                IrProgram::dxbc(&bytes, container::bytecode(&bytes, format).code_base),
+                IrProgram::dxbc(&bytes, container::bytecode(&bytes, format).code_base, profile),
                 Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string())),
             ),
             Format::Dxil => (
-                IrProgram::dxil(&bytes),
+                IrProgram::dxil(&bytes, profile),
                 Some(NagaProgram::dxil(&bytes).map_err(|r| r.to_string())),
             ),
         };
@@ -306,10 +307,16 @@ fn json<T: Serialize>(value: &T) -> String {
 
 #[wasm_bindgen]
 impl Shader {
-    /// Read a file's bytes.
+    /// Read a file's bytes, for a device with the optional WebGPU `features` named (the page's device's).
     #[wasm_bindgen(constructor)]
-    pub fn new(bytes: Vec<u8>) -> Result<Shader, JsError> {
-        Shader::open(bytes).map_err(|e| JsError::new(&e))
+    pub fn new(bytes: Vec<u8>, features: Vec<String>) -> Result<Shader, JsError> {
+        Shader::open(bytes, ir::profile(&features)).map_err(|e| JsError::new(&e))
+    }
+
+    /// The optional WebGPU features the WGSL can use where the device has them: the page asks for these.
+    #[wasm_bindgen(js_name = features)]
+    pub fn features() -> Vec<String> {
+        ir::FEATURES.iter().map(|f| (*f).to_owned()).collect()
     }
 
     /// The report, as JSON.

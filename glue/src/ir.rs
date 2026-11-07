@@ -11,36 +11,61 @@ use crate::view::{
     self, Binding, Executed, Io, LaneResult, Lifted, Linked, Pins, Request, Specialised, Wgsl,
 };
 
-/// A program lifted into the IR, before any pass.
+/// The optional WebGPU features whose WGSL [`profile`] can allow: the page asks its device for those the adapter has.
+pub const FEATURES: [&str; 4] = ["subgroups", "shader-f16", "primitive-index", "clip-distances"];
+
+/// The WGSL the page's device takes: browser WGSL, bound inside WebGPU's default limits, with the capabilities of the
+/// optional WebGPU `features` the device has (of [`FEATURES`]).
+pub fn profile(features: &[String]) -> iridia_naga::Profile {
+    use stock_naga::valid::Capabilities as C;
+    let capabilities = features.iter().fold(C::empty(), |c, f| match f.as_str() {
+        "subgroups" => c | C::SUBGROUP,
+        "shader-f16" => c | C::SHADER_FLOAT16,
+        "primitive-index" => c | C::PRIMITIVE_INDEX,
+        "clip-distances" => c | C::CLIP_DISTANCES,
+        _ => c,
+    });
+    iridia_naga::Profile::BROWSER.with(capabilities)
+}
+
+/// A program lifted into the IR, before any pass, and the profile its WGSL is written for.
 #[derive(Debug)]
 pub struct IrProgram {
     lifted: iridia_ir::Program,
     code_base: usize,
+    profile: iridia_naga::Profile,
 }
 
 impl IrProgram {
     /// Lift a Direct3D 9 token stream.
-    pub fn d3d9(bytes: &[u8]) -> Result<IrProgram, iridia_ir::Refusal> {
+    pub fn d3d9(bytes: &[u8], profile: iridia_naga::Profile) -> Result<IrProgram, iridia_ir::Refusal> {
         Ok(IrProgram {
             lifted: iridia_d3d9_ir::lift(bytes)?,
             code_base: 0,
+            profile,
         })
     }
 
     /// Lift a DXBC container's program; `code_base` is the file byte where its code part's data starts, which the
     /// lift's word offsets count from.
-    pub fn dxbc(bytes: &[u8], code_base: usize) -> Result<IrProgram, iridia_ir::Refusal> {
+    pub fn dxbc(
+        bytes: &[u8],
+        code_base: usize,
+        profile: iridia_naga::Profile,
+    ) -> Result<IrProgram, iridia_ir::Refusal> {
         Ok(IrProgram {
             lifted: iridia_dxbc::ir::lift(bytes)?,
             code_base,
+            profile,
         })
     }
 
     /// Lift a DXIL container's program. Its values' origins are bits of the bitcode, which the listing is not tied to.
-    pub fn dxil(bytes: &[u8]) -> Result<IrProgram, iridia_ir::Refusal> {
+    pub fn dxil(bytes: &[u8], profile: iridia_naga::Profile) -> Result<IrProgram, iridia_ir::Refusal> {
         Ok(IrProgram {
             lifted: iridia_dxil::ir::lift(bytes)?,
             code_base: 0,
+            profile,
         })
     }
 
@@ -101,8 +126,8 @@ impl IrProgram {
 
     /// A prepared program as browser WGSL, with its bindings and entry point.
     pub fn wgsl(&self, p: &iridia_ir::Program) -> Result<Wgsl, String> {
-        let text = iridia_naga::wgsl(p, &iridia_naga::Profile::BROWSER).map_err(|e| e.0)?;
-        let plan = iridia_naga::BindingPlan::d3d(&p.interface).map_err(|e| e.0)?;
+        let text = iridia_naga::wgsl(p, &self.profile).map_err(|e| e.0)?;
+        let plan = iridia_naga::BindingPlan::for_profile(&p.interface, &self.profile).map_err(|e| e.0)?;
         let io = iridia_naga::entry_io(&p.interface)?;
         Ok(Wgsl {
             text,
@@ -129,7 +154,7 @@ impl IrProgram {
         consumer: &Interface,
         taken: &[Binding],
     ) -> Result<Linked, String> {
-        let mut plan = iridia_naga::BindingPlan::d3d(&p.interface).map_err(|e| e.0)?;
+        let mut plan = iridia_naga::BindingPlan::for_profile(&p.interface, &self.profile).map_err(|e| e.0)?;
         for b in &mut plan.bindings {
             b.binding = view::after(taken, b.group, b.binding);
         }
@@ -146,7 +171,7 @@ impl IrProgram {
             plan,
             feeds: Some(consumer),
         };
-        let written = iridia_naga::wgsl_for(p, &iridia_naga::Profile::BROWSER, &pipeline).map_err(|e| e.0)?;
+        let written = iridia_naga::wgsl_for(p, &self.profile, &pipeline).map_err(|e| e.0)?;
         let io = iridia_naga::entry_io(&p.interface)?;
         let read = iridia_naga::entry_io(consumer)?;
         let outputs = io

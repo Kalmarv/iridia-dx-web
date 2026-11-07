@@ -1,7 +1,7 @@
 // The page: a header, the routes (#/ the examples and the drop zone, #/example/<id>, #/file for a dropped file,
 // #/coverage), the drag-and-drop over the whole window and the glue's lazy load.
 import './style.css';
-import { type Opened, Workspace, fetchExample } from './app';
+import { deviceFeatures, type Opened, Workspace, fetchExample } from './app';
 import { coverageView } from './coverage';
 import { h, plural } from './dom';
 import { byId, EXAMPLES } from './examples';
@@ -135,11 +135,12 @@ function failure(title: string, detail: string): HTMLElement {
 }
 
 async function open(files: { name: string; bytes: Uint8Array }[]): Promise<Opened[]> {
-  const Shader = await loadGlue();
+  // the WGSL is written for the device that runs it, so the device comes first
+  const [Shader, features] = await Promise.all([loadGlue(), deviceFeatures()]);
   return files.map((f) => {
     let shader;
     try {
-      shader = new Shader(f.bytes);
+      shader = new Shader(f.bytes, features);
     } catch (e) {
       throw new Error(`${f.name}: ${e instanceof Error ? e.message : String(e)}`);
     }

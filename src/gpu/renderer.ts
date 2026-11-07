@@ -88,18 +88,23 @@ export class Preview {
   private blits = new Map<string, GPURenderPipeline>();
   private fit: GPUBuffer;
   background: [number, number, number, number] = [0.08, 0.08, 0.1, 1];
+  /** The optional WebGPU features the device has, which the WGSL may use. */
+  get features(): string[] {
+    return [...this.device.features];
+  }
   lost: string | null = null;
   onLost: (why: string) => void = () => undefined;
   /** A WebGPU error outside a build's error scope: one met while drawing or reading back. */
   onError: (message: string) => void = () => undefined;
 
-  static async create(canvas: HTMLCanvasElement): Promise<Preview | string> {
+  /** A preview on a device with those of the optional `features` the adapter has. */
+  static async create(canvas: HTMLCanvasElement, features: string[]): Promise<Preview | string> {
     const rest = 'Everything else works here: the bytes and listing, the interface, the lift and its WGSL, specialising, and runs on the CPU in the Run tab.';
     if (!('gpu' in navigator) || !navigator.gpu)
       return `The live preview needs WebGPU, which this browser does not offer or has turned off. ${rest} For the preview, open the page in a recent Chrome, Edge or Safari, or in Firefox with WebGPU turned on.`;
     const adapter = await navigator.gpu.requestAdapter().catch(() => null);
     if (!adapter) return `This browser has WebGPU but found no graphics adapter to use (it can be turned off or blocked for this GPU), so there is no live preview. ${rest}`;
-    const device = await adapter.requestDevice();
+    const device = await adapter.requestDevice({ requiredFeatures: features.filter((f) => adapter.features.has(f)) as GPUFeatureName[] });
     const context = canvas.getContext('webgpu');
     if (!context) return `The canvas gave no WebGPU context, so there is no live preview. ${rest}`;
     return new Preview(device, canvas, context);

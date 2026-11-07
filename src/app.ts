@@ -7,6 +7,7 @@ import { exampleUrl } from './examples';
 import { multiply, Orbit, transformPoint } from './gpu/math';
 import { mesh as meshOf, MESHES, type Mesh } from './gpu/mesh';
 import { type Camera, type Program, Preview, type Scene } from './gpu/renderer';
+import { glue } from './wasm';
 import { fromFile, guess, placeholder, type Pixels } from './gpu/textures';
 import { defaultFeed, type Feed, FEEDS } from './gpu/wgsl';
 import type { Executed, Io, Linked, Pins, Report, Request, Result, Specialised, Wgsl } from './types';
@@ -51,13 +52,26 @@ const TAB_NAMES: Record<Tab, string> = {
   run: 'Run',
 };
 
+let starting: Promise<Preview | string> | null = null;
+/** The started preview (or why there is none) and its canvas, once `getPreview` has settled. */
 let preview: Preview | string | null = null;
 let previewCanvas: HTMLCanvasElement | null = null;
-async function getPreview(): Promise<Preview | string> {
-  if (preview) return preview;
-  previewCanvas = h('canvas.preview-canvas', { 'aria-label': 'live preview' });
-  preview = await Preview.create(previewCanvas).catch((e) => `WebGPU failed to start: ${e instanceof Error ? e.message : e}`);
-  return preview;
+/** The page's one preview, started on first need (by whichever caller comes first). */
+function getPreview(): Promise<Preview | string> {
+  starting ??= (async () => {
+    const canvas = h('canvas.preview-canvas', { 'aria-label': 'live preview' });
+    const wanted = (await glue()).features();
+    preview = await Preview.create(canvas, wanted).catch((e) => `WebGPU failed to start: ${e instanceof Error ? e.message : e}`);
+    previewCanvas = canvas;
+    return preview;
+  })();
+  return starting;
+}
+
+/** The optional WebGPU features of the preview's device, for the glue to write WGSL for: none without a device. */
+export async function deviceFeatures(): Promise<string[]> {
+  const p = await getPreview();
+  return typeof p === 'string' ? [] : p.features;
 }
 
 const stageOf = (r: Report): string | null => r.interface?.stage ?? null;
