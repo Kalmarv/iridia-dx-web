@@ -53,7 +53,7 @@ const header = h(
   h(
     'nav.links',
     h('a', { href: '#/' }, 'Examples'),
-    __COVERAGE__ ? h('a', { href: '#/coverage' }, 'Coverage') : null,
+    h('a', { href: '#/coverage' }, 'Coverage'),
     both('GitHub', (p) => p.repo),
     both('crates.io', (p) => p.crates),
     h('label.button.small', { htmlFor: 'open-file' }, 'Open…'),
@@ -213,7 +213,7 @@ async function route(): Promise<void> {
     main.replaceChildren(workspace.el);
     return;
   }
-  if (kind === 'coverage' && __COVERAGE__) {
+  if (kind === 'coverage') {
     show(loading('Reading the coverage table…'));
     const el = await coverageView();
     if (id === routeId) show(el);

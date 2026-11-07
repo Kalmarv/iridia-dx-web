@@ -338,8 +338,8 @@ td.ne { color: var(--bad); }
 .counts { display: flex; gap: 8px; flex-wrap: wrap; }
 .count { font-family: var(--mono); font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--bg-3); }
 .st-pass { color: var(--good); }
-.st-fail { color: var(--bad); }
-.st-refused, .st-skipped { color: var(--fg-3); }
+.st-fail, .st-error { color: var(--bad); }
+.st-refused, .st-skipped, .st-untested { color: var(--fg-3); }
 
 /* narrower windows: a laptop keeps two columns, then one */
 @media (max-width: 1280px) {
@@ -367,8 +367,21 @@ td.num { text-align: right; font-family: var(--mono); }
 .bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg-3); margin: 6px 0; }
 .seg-bar { display: block; }
 .st-bg-pass { background: var(--good); }
-.st-bg-fail { background: var(--bad); }
+.st-bg-fail, .st-bg-error { background: var(--bad); }
 .st-bg-refused, .st-bg-skipped { background: var(--fg-3); }
 .st-bg-xfail { background: color-mix(in srgb, var(--fg-3) 60%, transparent); }
 .st-bg-xpass, .st-bg-not-modelled, .st-bg-unsupported, .st-bg-compiler-refused { background: var(--warn); }
 .st-bg-other { background: var(--fg-2); }
+.outcome { white-space: nowrap; }
+.outcome .mark { display: inline-block; width: 1.1em; text-align: center; font-weight: 700; }
+.filter { display: inline-flex; align-items: center; gap: 6px; }
+.filter-label { font-size: 12px; color: var(--fg-2); }
+fieldset.outcomes { border: 0; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+fieldset.outcomes legend { float: left; margin-right: 4px; }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px 24px; }
+.suite-totals h3 { margin: 4px 0 0; }
+.extended-note { color: var(--fg-2); }
+.tag { font-size: 11px; color: var(--fg-3); }
+.legend dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 8px 0; }
+.legend dd { margin: 0; color: var(--fg-2); }
+table.runs td.why { overflow-wrap: anywhere; }

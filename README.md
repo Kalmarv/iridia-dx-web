@@ -14,6 +14,9 @@ lift it and run it, all in the page as WebAssembly with no server:
   beside the GPU's.
 - A live WebGPU preview on a screen quad or a mesh, with the program's constants and textures as controls. Without
   WebGPU everything but the preview works, and Run runs the CPU executors alone.
+- **Coverage** (`#/coverage`): iridia's coverage table at the commit the page is built from: each run of vkd3d's
+  HLSL tests and of LLVM's offload-test-suite, and each bytecode construct their programs use, with its outcome and,
+  for all but a pass, the reason.
 
 The marks are the projects' own: `src/assets/iridia-logo.svg` is iridia's `docs/logo.svg` and `src/assets/dx-logo.svg`
 is dx's. Replace a copy when its project's changes.
@@ -52,18 +55,20 @@ it shows a visitor a blank preview that a check can't see. On Linux:
 xvfb-run -a google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/checks \
   --enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan --enable-gpu --ignore-gpu-blocklist &
 node scripts/variants.mjs http://127.0.0.1:5173/ --cdp 9222     # every preview the toolbar reaches: drawn, no WebGPU error
-node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222  # wording, the loading bar, linked scrolling
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222  # wording, coverage, the loading bar, linked scrolling
 ```
 
 Without WebGPU the page keeps everything but the preview. Check that in a Chrome started with
 `--disable-features=WebGPU`, and again with `navigator.gpu` removed:
 
 ```sh
-node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording
-node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording --remove-gpu
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording,coverage
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording,coverage --remove-gpu
 ```
 
-The Coverage route is built in only where `coverage/coverage.json` (iridia's coverage table) exists.
+The Coverage route reads iridia's `docs/coverage/coverage.json` at the commit `glue/Cargo.toml` pins iridia to:
+`scripts/assets.mjs` fetches it once into `coverage/` (ignored by git), so the build needs the network the first time
+after each pin, and moving the pin moves the table with it.
 
 ## Layout
 
@@ -80,7 +85,8 @@ The Coverage route is built in only where `coverage/coverage.json` (iridia's cov
   and dxc; the compiled files are committed, so the page's build needs neither compiler.
 - `src/` is the page: `app.ts` the workspace for one shader or pair, `views/` its tabs, `gpu/` the WebGPU preview,
   `cpu.ts` the inputs the CPU runs take without a GPU, `coverage.ts` the coverage table.
-- `scripts/assets.mjs` copies what the page fetches at run time into `public/`.
+- `scripts/assets.mjs` copies what the page fetches at run time into `public/`; `scripts/iridia.mjs` reads the
+  iridia commit the glue pins.
 - `.github/workflows/pages.yml` builds the page from `main` and publishes it to GitHub Pages.
 
 ## License

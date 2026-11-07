@@ -1,9 +1,14 @@
-// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback]: the page's checks in
-// Chrome. In a Chrome without WebGPU (--disable-features=WebGPU: no adapter) run wording and fallback, and again with
+// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage]: the page's
+// checks in Chrome. In a Chrome without WebGPU (--disable-features=WebGPU: no adapter) run wording, fallback and coverage, and again with
 // --remove-gpu, which deletes navigator.gpu before the page loads (as in a browser with no WebGPU at all).
 //
-// - wording: no text the page shows, on any route or any tab of any example (with every constant pinned and a pixel
-//   run), names naga or says something is not yet done, unsupported or refused.
+// - wording: no text the page shows, on the examples route or any tab of any example (with every constant pinned and a
+//   pixel run), names naga or says something is not yet done, unsupported or refused. The Coverage route is iridia's
+//   table, whose outcomes are those words; the coverage check reads it instead.
+// - coverage: the route shows the iridia commit the glue pins; each suite's totals are the table's, and they are its
+//   selected runs alone (the extended ones apart); every outcome has its mark and label; every row but a pass gives
+//   its reason; the feature and run filters work from the keyboard alone (Tab, Space, Enter, typing) and pick exactly
+//   the rows the table holds for them. It needs no WebGPU: run it in the fallback Chromes too.
 // - progress: once the glue has loaded the bar under the header is full or gone, however the server states the
 //   download's length (exactly, as a total the bytes never reach, or not at all, as a compressing proxy does).
 // - scroll: selecting a listing line brings its bytes into view in the bytes pane, centred; selecting bytes or a
@@ -13,8 +18,9 @@
 // - fallback (a Chrome without WebGPU): each example opens with a note in place of the preview, not an error; every
 //   tab shows its content with no error; Run runs the CPU executors and shows their outputs.
 import { cli, connect, examples, SETTLE } from './browser.mjs';
+import { iridiaRev } from './iridia.mjs';
 
-const { page, flag, port } = cli('node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll]');
+const { page, flag, port } = cli('node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage]');
 const only = flag('--only')?.split(',');
 const b = await connect(port);
 const failures = [];
@@ -61,22 +67,8 @@ async function wording(ids) {
     if (lines.length) fail(`wording · ${what}`, lines.slice(0, 4).map((l) => JSON.stringify(l.trim().slice(0, 160))).join(', '));
     else pass(`wording · ${what}`);
   };
-  // the Coverage link and route exist exactly where the build has the coverage table
-  const coverage = await b.call(`async function () {
-    const r = await fetch('./coverage.json', { method: 'HEAD', cache: 'no-store' });
-    return { table: r.ok, link: !!document.querySelector('a[href="#/coverage"]') };
-  }`);
-  if (coverage.table !== coverage.link) fail('wording · Coverage link', `the build ${coverage.table ? 'has' : 'has no'} coverage.json but the link is ${coverage.link ? 'shown' : 'hidden'}`);
-  else pass(`wording · Coverage link ${coverage.link ? 'shown, with its table' : 'hidden, with no table'}`);
-  for (const hash of ['#/', '#/coverage']) {
-    await route(hash);
-    await look(hash);
-  }
-  if (!coverage.table) {
-    const heading = await b.call(`function () { return [...document.querySelectorAll('main h1')].map((e) => e.textContent).join(' | '); }`);
-    if (/coverage/i.test(heading)) fail('wording · #/coverage', `a Coverage page with no table: ${heading}`);
-    else pass('wording · #/coverage with no table opens the examples');
-  }
+  await route('#/');
+  await look('#/');
   for (const ex of ids) {
     await route(`#/example/${ex}`);
     for (const t of await tabs()) {
@@ -149,6 +141,128 @@ async function fallback(ids) {
       else pass(`${what}${t === 'run' ? `: ${r.columns.slice(1).join(', ')}` : ''}`);
     }
   }
+}
+
+// ---- coverage ----
+
+/** Press `key` in the page as the keyboard does, with Shift when `shift`. */
+async function press(key, shift = false) {
+  const keys = { Tab: [9, 'Tab', ''], Space: [32, ' ', ' '], Enter: [13, 'Enter', '\r'] };
+  const [code, name, text] = keys[key];
+  const common = { key: name, code: key, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers: shift ? 8 : 0 };
+  await b.send('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', text: text || undefined, ...common });
+  await b.send('Input.dispatchKeyEvent', { type: 'keyUp', ...common });
+  await sleep(40);
+}
+/** Tab (back with `back`) until the focused element matches `test` (a function's source taking it); the presses it took. */
+async function tabTo(test, what, most = 60, back = false) {
+  for (let i = 1; i <= most; i++) {
+    await press('Tab', back);
+    if (await b.call(`function () { return (${test})(document.activeElement); }`)) return i;
+  }
+  throw new Error(`Tab never reached ${what}`);
+}
+/** What the coverage page shows: totals by suite, each table's rows and its status line, and rows lacking a mark or a reason. */
+const shownCoverage = () =>
+  b.call(`function () {
+    const rows = (sel) => [...document.querySelectorAll(sel + ' tbody tr')].map((tr) => {
+      const o = tr.querySelector('.outcome');
+      return { status: o?.dataset.status, mark: o?.querySelector('.mark')?.textContent ?? '', label: o?.textContent.replace(o.querySelector('.mark')?.textContent ?? '', '').trim(), cells: [...tr.cells].map((c) => c.textContent), extended: !!tr.querySelector('.tag') };
+    });
+    return {
+      h1: document.querySelector('main h1')?.textContent,
+      commit: document.querySelector('.coverage .lede a.mono')?.textContent,
+      totals: Object.fromEntries([...document.querySelectorAll('.suite-totals')].map((s) => [s.querySelector('h3').textContent, Object.fromEntries([...s.querySelectorAll('.count')].map((c) => [c.querySelector('.outcome').dataset.status, Number(c.textContent.replace(/[^0-9]/g, ''))]))])),
+      extendedNote: document.querySelector('.extended-note')?.textContent ?? '',
+      features: rows('table.features'), runs: rows('table.runs'),
+      featuresShown: document.querySelector('table.features')?.closest('section').querySelector('[role=status]')?.textContent,
+      runsShown: document.querySelector('table.runs')?.closest('section').querySelector('[role=status]')?.textContent,
+      errors: [...document.querySelectorAll('.coverage .error-box')].map((e) => e.textContent),
+    };
+  }`);
+
+async function coverage() {
+  await route('#/coverage');
+  const table = await b.call(`async function () { return (await fetch('./coverage.json', { cache: 'no-store' })).json(); }`);
+  const rev = iridiaRev();
+  const tally = (rows) => rows.reduce((m, r) => ((m[r.status] = (m[r.status] ?? 0) + 1), m), {});
+  const same = (a, b) => JSON.stringify(Object.entries(a).filter(([, n]) => n).sort()) === JSON.stringify(Object.entries(b).filter(([, n]) => n).sort());
+  const check = (what, ok, why) => (ok ? pass(`coverage · ${what}`) : fail(`coverage · ${what}`, why));
+  let v = await shownCoverage();
+  check('opens', v.h1 === 'Coverage' && !v.errors.length, `heading ${v.h1}, errors ${v.errors}`);
+  check(`made at the pinned iridia ${rev.slice(0, 7)}`, v.commit === rev.slice(0, 7), `the page names ${v.commit}`);
+  check('the table is schema version 1', table.version === 1, `version ${table.version}`);
+  for (const s of table.suites) {
+    const selected = s.rows.filter((r) => r.selected !== false);
+    check(`${s.id} · totals are the table's selected runs (${selected.length} of ${s.rows.length})`, same(tally(selected), s.totals), `rows ${JSON.stringify(tally(selected))}, totals ${JSON.stringify(s.totals)}`);
+    if (s.extended_totals) check(`${s.id} · extended totals are the other ${s.rows.length - selected.length} runs`, same(tally(s.rows.filter((r) => r.selected === false)), s.extended_totals), JSON.stringify(s.extended_totals));
+    check(`${s.id} · the page shows those totals`, same(v.totals[s.name] ?? {}, s.totals), `shown ${JSON.stringify(v.totals[s.name])}`);
+    const reasonless = s.rows.filter((r) => r.status !== 'pass' && !r.detail.trim());
+    check(`${s.id} · every run but a pass has a reason in the table`, !reasonless.length, `${reasonless.length} without: ${reasonless.slice(0, 3).map((r) => r.id)}`);
+  }
+  const vk = table.suites.find((s) => s.extended_totals);
+  const extended = vk ? vk.rows.length - vk.rows.filter((r) => r.selected !== false).length : 0;
+  check('the extended runs are said to be left out of the totals', !vk || (v.extendedNote.includes('Not counted') && v.extendedNote.includes(extended.toLocaleString('en-US'))), v.extendedNote);
+  const marked = (rows, what) => {
+    const bad = rows.filter((r) => !r.status || !r.mark.trim() || !r.label);
+    const reasonless = rows.filter((r) => r.status !== 'pass' && /^(—|)$/.test(r.cells.at(-1).trim()));
+    check(`${what} · ${rows.length} rows each with a mark and a label, and a reason but for a pass`, rows.length && !bad.length && !reasonless.length, `${rows.length} rows; no mark or label: ${bad.length}; no reason: ${reasonless.slice(0, 3).map((r) => r.cells[1])}`);
+  };
+  marked(v.features, 'features');
+  check(`features · all ${table.features.length} shown to start`, v.features.length === table.features.length, `${v.features.length} rows, ${v.featuresShown}`);
+
+  // the features' filters by keyboard: Tab to the Stages button and press Enter, then type in their search box
+  await b.call(`function () { document.activeElement?.blur(); window.scrollTo(0, 0); }`);
+  await tabTo(`(e) => e?.matches?.('button.seg') && e.textContent === 'Stages'`, 'the Stages button');
+  await press('Enter');
+  v = await shownCoverage();
+  const stages = table.features.filter((f) => f.kind === 'stage');
+  check(`features · Stages by keyboard: the ${stages.length} stage rows`, v.features.length === stages.length && v.features.every((r) => r.cells[3] === 'stage'), `${v.features.length} rows: ${v.featuresShown}`);
+  await tabTo(`(e) => e?.matches?.('input[type=search][aria-label="Filter features"]')`, 'the features search');
+  await b.send('Input.insertText', { text: 'ps_' });
+  await sleep(200);
+  v = await shownCoverage();
+  const ps = stages.filter((f) => f.name.toLowerCase().includes('ps_'));
+  check(`features · typing “ps_”: the ${ps.length} pixel stages`, ps.length && v.features.length === ps.length && v.features.every((r) => r.cells[1].includes('ps_')), `${v.features.length} rows: ${v.features.map((r) => r.cells[1])}`);
+
+  // the runs: passes hidden and the extended runs left out to start
+  const nonPass = (rows) => rows.filter((r) => r.status !== 'pass');
+  const expectShown = (count) => (count > 400 ? `400 runs shown of the ${count.toLocaleString('en-US')} picked: filter to see the rest.` : `${count} run${count === 1 ? '' : 's'} shown.`);
+  const first = table.suites[0];
+  const start = nonPass(first.rows.filter((r) => r.selected !== false)).length;
+  v = await shownCoverage();
+  check(`runs · ${first.id} to start: its ${start} selected runs but the passes`, v.runsShown === expectShown(start) && v.runs.every((r) => r.status !== 'pass' && !r.extended), v.runsShown);
+  marked(v.runs, `runs · ${first.id}`);
+  if (vk === first) {
+    await tabTo(`(e) => e?.matches?.('input[type=checkbox]') && e.parentElement.textContent.trim() === 'Extended runs'`, 'the Extended runs box');
+    await press('Space');
+    v = await shownCoverage();
+    const all = nonPass(first.rows).length;
+    check(`runs · Extended runs by keyboard: ${all} runs but the passes`, v.runsShown === expectShown(all) && v.runs.some((r) => r.extended), v.runsShown);
+  }
+  await tabTo(`(e) => e?.matches?.('fieldset.outcomes input[value=pass]') && e.closest('section').querySelector('table.runs')`, 'the runs’ pass box');
+  await press('Space');
+  v = await shownCoverage();
+  check(`runs · pass ticked by keyboard: all ${first.rows.length}`, v.runsShown === expectShown(first.rows.length), v.runsShown);
+  const term = 'texture';
+  const back = await tabTo(`(e) => e?.getAttribute?.('aria-label') === ${JSON.stringify(`Filter ${first.id} runs`)}`, 'the runs search', 20, true);
+  await b.send('Input.insertText', { text: term });
+  await sleep(200);
+  v = await shownCoverage();
+  const matching = first.rows.filter((r) => `${r.case} ${r.model} ${r.detail}`.toLowerCase().includes(term)).length;
+  check(`runs · Shift+Tab ${back} back to the search, typing “${term}”: ${matching} runs`, v.runsShown === expectShown(matching), v.runsShown);
+  // the other suite, by keyboard from the Suite buttons
+  for (const s of table.suites.slice(1)) {
+    await b.call(`function () { document.querySelector('[role=group][aria-label=Suite] button')?.focus(); }`);
+    const at = await tabTo(`(e) => e?.matches?.('[role=group][aria-label=Suite] button') && e.textContent === ${JSON.stringify(s.name)}`, s.name, 5);
+    await press('Enter');
+    v = await shownCoverage();
+    const count = nonPass(s.rows).length;
+    check(`runs · ${s.id} by keyboard (${at} Tab): its ${count} runs but the passes`, v.runsShown === expectShown(count) && v.runs.every((r) => r.status !== 'pass'), v.runsShown);
+    marked(v.runs, `runs · ${s.id}`);
+  }
+  const logged = b.drain();
+  check('nothing logged as an error', !logged.length, logged.slice(0, 3).join(' | '));
 }
 
 // ---- progress ----
@@ -415,6 +529,10 @@ if (want('scroll')) {
 if (want('fallback')) {
   await viewport(1400, 900);
   await fallback(ids);
+}
+if (want('coverage')) {
+  await viewport(1400, 900);
+  await coverage();
 }
 if (want('progress')) {
   await viewport(1400, 900);

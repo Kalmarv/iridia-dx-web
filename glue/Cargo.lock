@@ -97,15 +97,6 @@ dependencies = [
 
 [[package]]
 name = "d3d9-reader"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a404354fc6f9f548fcf7d948254adafeadb38651f5b06eab8ad884870bfedc"
-dependencies = [
- "thiserror",
-]
-
-[[package]]
-name = "d3d9-reader"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d425781216a902c5a8bd7989bb800eb53e583d3407af92fb7477903ae72763"
@@ -125,33 +116,12 @@ dependencies = [
 
 [[package]]
 name = "dxbc-reader"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7181997cc7f1087415e25f34752990fb791b640f45979111bde2138648a8223d"
-dependencies = [
- "d3d9-reader 0.5.2",
- "dxcontainer 0.5.2",
- "thiserror",
-]
-
-[[package]]
-name = "dxbc-reader"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96d26dabbab1eed38a948279b3322c30677ee4849ea3704374e530549d2d5ad1"
 dependencies = [
- "d3d9-reader 0.11.0",
- "dxcontainer 0.11.0",
- "thiserror",
-]
-
-[[package]]
-name = "dxcontainer"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a72b53e28e66291f1bba82ff60310c6942aa7c2b306c048578afc88614459e5c"
-dependencies = [
- "primase-foundations",
+ "d3d9-reader",
+ "dxcontainer",
  "thiserror",
 ]
 
@@ -167,22 +137,11 @@ dependencies = [
 
 [[package]]
 name = "dxil-reader"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31f23adbd404d86de3b5cbdae187f38a764af3cb783884ec3b76c025a52c21c7"
-dependencies = [
- "dxcontainer 0.5.2",
- "primase-foundations",
- "thiserror",
-]
-
-[[package]]
-name = "dxil-reader"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "663bdc332f401344e64903868769f593f33df7597336fac80de204679eaa17ac"
 dependencies = [
- "dxcontainer 0.11.0",
+ "dxcontainer",
  "primase-foundations",
  "thiserror",
 ]
@@ -242,7 +201,7 @@ dependencies = [
 [[package]]
 name = "iridia"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
  "iridia-interface",
  "iridia-ir",
@@ -255,19 +214,19 @@ dependencies = [
 [[package]]
 name = "iridia-d3d9-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
- "d3d9-reader 0.5.2",
+ "d3d9-reader",
  "iridia-ir",
 ]
 
 [[package]]
 name = "iridia-dxbc"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
- "dxbc-reader 0.5.2",
- "dxcontainer 0.5.2",
+ "dxbc-reader",
+ "dxcontainer",
  "iridia",
  "iridia-ir",
  "primase-naga",
@@ -276,10 +235,10 @@ dependencies = [
 [[package]]
 name = "iridia-dxil"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
- "dxcontainer 0.5.2",
- "dxil-reader 0.5.2",
+ "dxcontainer",
+ "dxil-reader",
  "half",
  "iridia",
  "iridia-ir",
@@ -289,7 +248,7 @@ dependencies = [
 [[package]]
 name = "iridia-exec"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
  "half",
  "iridia",
@@ -304,7 +263,7 @@ dependencies = [
 [[package]]
 name = "iridia-exec-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
  "iridia-ir",
 ]
@@ -312,7 +271,7 @@ dependencies = [
 [[package]]
 name = "iridia-interface"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
  "iridia-ir",
  "serde",
@@ -321,7 +280,7 @@ dependencies = [
 [[package]]
 name = "iridia-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
  "serde",
  "serde_json",
@@ -331,7 +290,7 @@ dependencies = [
 [[package]]
 name = "iridia-naga"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
  "iridia-ir",
  "naga",
@@ -340,7 +299,7 @@ dependencies = [
 [[package]]
 name = "iridia-passes"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=bb4c095691b71a6404e6a577640cf1c74b12653b#bb4c095691b71a6404e6a577640cf1c74b12653b"
+source = "git+https://github.com/Kalmarv/iridia?rev=0a6e43a81fea9fa90a530c5def7a80a20f084d21#0a6e43a81fea9fa90a530c5def7a80a20f084d21"
 dependencies = [
  "iridia-ir",
 ]
@@ -349,10 +308,10 @@ dependencies = [
 name = "iridia-web"
 version = "0.0.0"
 dependencies = [
- "d3d9-reader 0.11.0",
- "dxbc-reader 0.11.0",
- "dxcontainer 0.11.0",
- "dxil-reader 0.11.0",
+ "d3d9-reader",
+ "dxbc-reader",
+ "dxcontainer",
+ "dxil-reader",
  "iridia",
  "iridia-d3d9-ir",
  "iridia-dxbc",

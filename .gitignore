@@ -3,4 +3,5 @@ dist/
 pkg/
 public/examples/
 public/coverage.json
+coverage/
 glue/target/
