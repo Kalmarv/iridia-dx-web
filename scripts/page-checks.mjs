@@ -1,14 +1,19 @@
-// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage]: the page's
-// checks in Chrome. In a Chrome without WebGPU (--disable-features=WebGPU: no adapter) run wording, fallback and coverage, and again with
+// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage,dropped]: the
+// page's checks in Chrome. In a Chrome without WebGPU (--disable-features=WebGPU: no adapter) run wording, fallback,
+// coverage and dropped, and again with
 // --remove-gpu, which deletes navigator.gpu before the page loads (as in a browser with no WebGPU at all).
 //
 // - wording: no text the page shows, on the examples route or any tab of any example (with every constant pinned and a
 //   pixel run), names naga or says something is not yet done, unsupported or refused. The Coverage route is iridia's
 //   table, whose outcomes are those words; the coverage check reads it instead.
-// - coverage: the route shows the iridia commit the glue pins; each suite's totals are the table's, and they are its
-//   selected runs alone (the extended ones apart); every outcome has its mark and label; every row but a pass gives
-//   its reason; the feature and run filters work from the keyboard alone (Tab, Space, Enter, typing) and pick exactly
+// - coverage: the route shows the iridia commit the glue pins, iridia's version and dx's; each suite's totals are the
+//   table's, and they are its selected runs alone (the extended ones apart); every run names its format; every
+//   outcome has its mark and label; every row but a pass gives its reason; the feature and run filters work from the keyboard alone (Tab, Space, Enter, typing) and pick exactly
 //   the rows the table holds for them. It needs no WebGPU: run it in the fallback Chromes too.
+// - dropped: the glue's test programs a browser cannot draw, opened as a visitor opens a file: an amplification program
+//   (WebGPU has no such stage) is listed and lifted, with a note in place of the preview and no Run tab; a pixel program
+//   in doubles says its value is f64, and one iridia refuses gives the refusal; neither has a Run tab. Runs in the
+//   fallback Chromes too (the note comes before any WebGPU).
 // - progress: once the glue has loaded the bar under the header is full or gone, however the server states the
 //   download's length (exactly, as a total the bytes never reach, or not at all, as a compressing proxy does).
 // - scroll: selecting a listing line brings its bytes into view in the bytes pane, centred; selecting bytes or a
@@ -18,9 +23,10 @@
 // - fallback (a Chrome without WebGPU): each example opens with a note in place of the preview, not an error; every
 //   tab shows its content with no error; Run runs the CPU executors and shows their outputs.
 import { cli, connect, examples, SETTLE } from './browser.mjs';
-import { iridiaRev } from './iridia.mjs';
+import { join } from 'node:path';
+import { iridiaRev, web } from './iridia.mjs';
 
-const { page, flag, port } = cli('node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage]');
+const { page, flag, port } = cli('node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage,dropped]');
 const only = flag('--only')?.split(',');
 const b = await connect(port);
 const failures = [];
@@ -192,11 +198,17 @@ async function coverage() {
   check('opens', v.h1 === 'Coverage' && !v.errors.length, `heading ${v.h1}, errors ${v.errors}`);
   check(`made at the pinned iridia ${rev.slice(0, 7)}`, v.commit === rev.slice(0, 7), `the page names ${v.commit}`);
   check('the table is schema version 1', table.version === 1, `version ${table.version}`);
+  const graded = await b.call(`function () { return document.querySelector('.coverage .graded-note')?.textContent ?? ''; }`);
+  check(table.graded ? 'the table names the path it grades' : 'a table naming no graded path is said to grade the older lift', table.graded ? !graded : /older lift/.test(graded), graded || 'no note');
+  const lede = await b.call(`function () { return document.querySelector('.coverage .lede')?.textContent ?? ''; }`);
+  check(`names iridia ${table.iridia} and dx’s ${table.dx}`, lede.includes(`iridia ${table.iridia}`) && lede.includes(table.dx), lede);
   for (const s of table.suites) {
     const selected = s.rows.filter((r) => r.selected !== false);
     check(`${s.id} · totals are the table's selected runs (${selected.length} of ${s.rows.length})`, same(tally(selected), s.totals), `rows ${JSON.stringify(tally(selected))}, totals ${JSON.stringify(s.totals)}`);
     if (s.extended_totals) check(`${s.id} · extended totals are the other ${s.rows.length - selected.length} runs`, same(tally(s.rows.filter((r) => r.selected === false)), s.extended_totals), JSON.stringify(s.extended_totals));
     check(`${s.id} · the page shows those totals`, same(v.totals[s.name] ?? {}, s.totals), `shown ${JSON.stringify(v.totals[s.name])}`);
+    const formatless = s.rows.filter((r) => !['d3d9', 'dxbc', 'dxil'].includes(r.format));
+    check(`${s.id} · every run names its format`, !formatless.length, `${formatless.length} without: ${formatless.slice(0, 3).map((r) => r.id)}`);
     const reasonless = s.rows.filter((r) => r.status !== 'pass' && !r.detail.trim());
     check(`${s.id} · every run but a pass has a reason in the table`, !reasonless.length, `${reasonless.length} without: ${reasonless.slice(0, 3).map((r) => r.id)}`);
   }
@@ -263,6 +275,72 @@ async function coverage() {
   }
   const logged = b.drain();
   check('nothing logged as an error', !logged.length, logged.slice(0, 3).join(' | '));
+}
+
+// ---- dropped programs ----
+
+/** Open `file` (a path on this machine) through the page's file input, as a visitor's Open… does, and let it settle. */
+async function drop(file) {
+  await route('#/');
+  const doc = await b.send('DOM.getDocument', {});
+  const { nodeId } = await b.send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: 'input[type=file]' });
+  await b.send('DOM.setFileInputFiles', { nodeId, files: [file] });
+  await b.call(`async function () { ${SETTLE};
+    for (let i = 0; i < 200 && !document.querySelector('.workspace'); i++) await new Promise((r) => setTimeout(r, 50));
+    await settle();
+  }`);
+}
+
+// the glue's test programs a browser cannot draw: each opens, listed and lifted, and says why there is no picture
+async function dropped() {
+  const programs = join(web, 'glue', 'tests', 'programs');
+  const preview = () =>
+    b.call(`function () {
+      const m = document.querySelector('.workspace .preview-message');
+      return { state: document.querySelector('.workspace')?.dataset.preview, note: m?.querySelector('.note-box')?.textContent ?? '', error: m?.querySelector('.error-box')?.textContent ?? '' };
+    }`);
+  const body = () => b.call(`function () { const t = document.querySelector('.workspace .tab-body'); return { text: t?.innerText ?? '', error: [...(t?.querySelectorAll('.error-box') ?? [])].map((e) => e.textContent).join(' | ') }; }`);
+
+  await drop(join(programs, 'amplification', 'amplification.dxil'));
+  let v = await preview();
+  if (v.state !== 'none' || !/no amplification stage/.test(v.note) || v.error) fail('dropped · amplification · preview', JSON.stringify(v));
+  else pass('dropped · amplification · a note in place of the preview: WebGPU has no amplification stage');
+  const shown = await tabs();
+  if (shown.includes('run')) fail('dropped · amplification · tabs', `a Run tab, where nothing runs: ${shown}`);
+  else pass(`dropped · amplification · no Run tab: ${shown.join(', ')}`);
+  for (const t of ['bytecode', 'lift']) {
+    await tab(t);
+    const r = await body();
+    const what = `dropped · amplification · ${t}`;
+    if (t === 'bytecode' && (!/dx\.op\.dispatchMesh/.test(r.text) || r.error)) fail(what, r.error || 'no listing with its dispatchMesh');
+    else if (t === 'lift' && !/iridia-ir 1/.test(r.text)) fail(what, 'no lifted program');
+    else pass(what);
+  }
+
+  await drop(join(programs, 'doubles', 'doubles.dxbc'));
+  v = await preview();
+  if (v.state !== 'failed' || !/f64/.test(v.error)) fail('dropped · doubles · preview', JSON.stringify(v));
+  else pass('dropped · doubles · the preview says why: a value is f64, which browser WGSL has no type for');
+  await tab('lift');
+  const r = await body();
+  if (!/f64/.test(r.text)) fail('dropped · doubles · lift', 'the lifted program shows no f64');
+  else pass('dropped · doubles · lift shows the program in f64');
+  if ((await tabs()).includes('run')) fail('dropped · doubles · tabs', 'a Run tab, with no WGSL to run from');
+  else pass('dropped · doubles · no Run tab');
+
+  await drop(join(programs, 'sample-count', 'sample-count.dxbc'));
+  v = await preview();
+  if (v.state !== 'failed' || !/sample count of the rasterizer/.test(v.error)) fail('dropped · sample-count · preview', JSON.stringify(v));
+  else pass('dropped · sample-count · the preview gives the refusal: the sample count is the pipeline’s');
+  await tab('bytecode');
+  const listed = await body();
+  if (!/sampleinfo o0\.x, rasterizer\.x/.test(listed.text) || listed.error) fail('dropped · sample-count · bytecode', listed.error || 'no listing with its sampleinfo');
+  else pass('dropped · sample-count · bytecode lists it');
+  if ((await tabs()).includes('run')) fail('dropped · sample-count · tabs', 'a Run tab, for a refused program');
+  else pass('dropped · sample-count · no Run tab');
+  const logged = b.drain();
+  if (logged.length) fail('dropped · nothing logged as an error', logged.slice(0, 3).join(' | '));
+  else pass('dropped · nothing logged as an error');
 }
 
 // ---- progress ----
@@ -529,6 +607,10 @@ if (want('scroll')) {
 if (want('fallback')) {
   await viewport(1400, 900);
   await fallback(ids);
+}
+if (want('dropped')) {
+  await viewport(1400, 900);
+  await dropped();
 }
 if (want('coverage')) {
   await viewport(1400, 900);

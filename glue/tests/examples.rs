@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use iridia_web::Shader;
 use iridia_web::container::Format;
+use iridia_web::{Report, Shader};
 
 fn examples() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples")
@@ -69,16 +69,53 @@ fn every_example_lists_as_microsofts_tools_list_it() {
     assert!(differ.is_empty(), "{}", differ.join("\n"));
 }
 
+/// A program of the glue's tests (`tests/programs/<name>/<name>.<ext>`), with the listing Microsoft's tools wrote of it.
+fn program(name: &str, ext: &str) -> (Report, String) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/programs/{name}/{name}.{ext}"));
+    let reference = std::fs::read_to_string(path.with_extension(format!("{ext}.ms.txt"))).unwrap();
+    (open(&path).report(), reference)
+}
+
 /// A program iridia refuses is listed all the same, and its report says why.
 #[test]
 fn a_refused_program_is_listed_and_says_why() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/refused/amplification/amplification.dxil");
-    let report = open(&path).report();
-    let reference = std::fs::read_to_string(path.with_extension("dxil.ms.txt")).unwrap();
+    let (report, reference) = program("sample-count", "dxbc");
     assert_eq!(report.bytecode.listing.unwrap(), reference);
     let refusal = report.refusal.unwrap();
-    assert!(refusal.message.contains("amplification"), "{}", refusal.message);
+    assert!(
+        refusal.message.contains("sample count of the rasterizer"),
+        "{}",
+        refusal.message
+    );
+    assert!(report.lifted.is_err());
     assert!(report.wgsl.is_err());
+    assert!(report.executors.is_empty(), "{:?}", report.executors);
+}
+
+/// A program WebGPU has no type for is listed and lifted all the same, and the WGSL's failure says why.
+#[test]
+fn a_program_using_doubles_is_listed_and_lifted_and_says_why_there_is_no_wgsl() {
+    let (report, reference) = program("doubles", "dxbc");
+    assert_eq!(report.bytecode.listing.unwrap(), reference);
+    assert!(report.refusal.is_none(), "{:?}", report.refusal);
+    assert!(report.lifted.unwrap().text.contains("f64"));
+    let e = report.wgsl.unwrap_err();
+    assert!(e.contains("f64"), "{e}");
+}
+
+/// An amplification program (WebGPU has no mesh pipeline) is listed and lifted, has no WGSL and is offered no CPU run.
+#[test]
+fn an_amplification_program_is_listed_and_lifted_but_not_run() {
+    let (report, reference) = program("amplification", "dxil");
+    assert_eq!(report.bytecode.listing.unwrap(), reference);
+    assert!(report.refusal.is_none(), "{:?}", report.refusal);
+    assert_eq!(
+        report.interface.as_ref().unwrap().stage,
+        iridia_ir::interface::Stage::Amplification
+    );
+    assert!(report.lifted.unwrap().text.contains("workgroup"));
+    assert!(report.wgsl.is_err());
+    assert!(report.executors.is_empty(), "{:?}", report.executors);
 }
 
 #[test]

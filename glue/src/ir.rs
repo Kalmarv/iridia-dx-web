@@ -221,11 +221,12 @@ impl IrProgram {
         })
     }
 
-    /// The CPU executors that run the program with `state` folded: for a vertex or pixel program `iridia-exec-ir`,
-    /// and `iridia-exec` where it compiles the program; none for a compute program.
+    /// The CPU executors that run the program with `state` folded: `iridia-exec-ir`, and `iridia-exec` where it
+    /// compiles the program, for a pixel or vertex program; none for any other stage.
     pub fn executors(&self, state: &[(ResourceId, [u64; 4])]) -> Vec<&'static str> {
-        // the page's CPU run is one invocation's inputs and outputs, which a compute program has none of
-        if self.interface().stage == Stage::Compute {
+        // the page's CPU run is one pixel or vertex invocation's inputs and outputs: a compute, mesh or
+        // amplification program has none (it reads and writes memory a thread group shares), nor do the other stages
+        if !matches!(self.interface().stage, Stage::Pixel | Stage::Vertex) {
             return Vec::new();
         }
         let mut out = vec!["iridia-exec-ir"];

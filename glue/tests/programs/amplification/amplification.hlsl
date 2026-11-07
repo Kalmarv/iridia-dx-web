@@ -1,5 +1,5 @@
 // A Shader Model 6.5 amplification program: culls a group of meshlets against a plane and launches mesh groups for
-// the survivors with a payload. WebGPU has no mesh pipeline, so the page shows the program, not a picture.
+// the survivors with a payload. WebGPU has no mesh pipeline, so the page lists and lifts it but draws and runs nothing.
 // dxc -T as_6_5 -E main amplification.hlsl
 struct Payload
 {

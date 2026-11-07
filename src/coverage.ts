@@ -28,7 +28,7 @@ interface Suite {
   extended_totals?: Counts;
   rows: Row[];
 }
-interface Coverage { version: number; iridia: string; features: Feature[]; suites: Suite[] }
+interface Coverage { version: number; iridia: string; dx: string; graded?: unknown; features: Feature[]; suites: Suite[] }
 
 const SUPPORTED = 1;
 const ROWS_SHOWN = 400;
@@ -274,10 +274,19 @@ export async function coverageView(): Promise<HTMLElement> {
       'p.lede',
       'What dx and iridia do with the programs of two public shader test suites: each run of their tests, and each bytecode construct those programs use. From ',
       h('a', { href: `${table}/coverage.md`, rel: 'noopener' }, 'iridia’s coverage table'),
-      ` (iridia ${data.iridia}) at commit `,
+      ` (iridia ${data.iridia}, dx’s ${data.dx}) at commit `,
       h('a.mono', { href: `${IRIDIA}/commit/${rev}`, rel: 'noopener' }, rev.slice(0, 7)),
       ', the commit this page’s iridia is built from.',
     ),
+    // tables of schema version 1 that name no graded path grade iridia's older lift (iridia_dxbc::lift and
+    // iridia_dxil::lift, WGSL from iridia::emit), not the IR path the page's other views use
+    data.graded
+      ? null
+      : h(
+          'div.note-box.graded-note',
+          h('strong', 'Which lift this grades: '),
+          'this table grades iridia’s older lift, which writes WGSL through naga, not the IR path the rest of this page uses. Its refusals and errors are that lift’s, and the IR path lifts some of those programs: doubles, for one. A table of the IR path will replace it.',
+        ),
     h('section', h('h2', 'Runs by outcome'), h('div.totals', data.suites.map(totals))),
     h('details.legend', h('summary', 'What each outcome means'), h('dl', ORDER.map((k) => [h('dt', outcome(k)), h('dd', OUTCOMES[k].means)]))),
     featureTable(data.features, data.suites),

@@ -43,8 +43,11 @@ fxc post/bloom-tonemap.hlsl ps_5_0 post/bloom-tonemap.dxbc
 fxc compute-fractal/julia.hlsl cs_5_0 compute-fractal/julia.dxbc
 dxc sdf-dxil/raymarch.hlsl ps_6_0 sdf-dxil/raymarch.dxil
 dxc pbr-dxil/pbr.hlsl ps_6_0 pbr-dxil/pbr.dxil
-# not an example: a program iridia refuses, for the glue's tests
-dxc ../glue/tests/refused/amplification/amplification.hlsl as_6_5 ../glue/tests/refused/amplification/amplification.dxil
+# not examples: programs the page lists and lifts but cannot run in a browser, for the glue's tests
+dxc ../glue/tests/programs/amplification/amplification.hlsl as_6_5 ../glue/tests/programs/amplification/amplification.dxil
+fxc ../glue/tests/programs/doubles/doubles.hlsl ps_5_0 ../glue/tests/programs/doubles/doubles.dxbc
+# and one iridia refuses to lift: the render target's sample count is the pipeline's
+fxc ../glue/tests/programs/sample-count/sample-count.hlsl ps_5_0 ../glue/tests/programs/sample-count/sample-count.dxbc
 
 # pixel 1.1 has no HLSL compiler any more: D3DAssemble assembles it, and D3DDisassemble lists it
 "$WINPY" "$(wine_path "$IRIDIA/iridia-d3d9-ir/tests/oracles/assemble.py")" "$(wine_path "$D3DCOMPILER")" \

@@ -75,6 +75,16 @@ export async function deviceFeatures(): Promise<string[]> {
 }
 
 const stageOf = (r: Report): string | null => r.interface?.stage ?? null;
+/**
+ * Why the page neither draws nor runs a program of this stage, or null where it does: WebGPU's pipelines have pixel,
+ * vertex and compute stages only, and the CPU run is one such invocation.
+ */
+const undrawable = (r: Report): string | null => {
+  const stage = stageOf(r);
+  return stage && !['pixel', 'vertex', 'compute'].includes(stage)
+    ? `WebGPU has no ${stage} stage, so the page draws and runs nothing for this program: Bytecode, Interface and Lift show it.`
+    : null;
+};
 
 export class Workspace {
   readonly el: HTMLElement;
@@ -480,8 +490,11 @@ export class Workspace {
 
   /** The tabs shown: Flow where a program has analyses (they read DXBC and DXIL programs), Run where something runs. */
   private tabs(): Tab[] {
-    // Run where something runs: the GPU's readback, or without WebGPU a CPU executor
-    const runs = typeof preview !== 'string' || this.progs.some((p) => p.report.executors.length);
+    // Run where something runs: the GPU's readback, or without WebGPU a CPU executor. Both start from what the
+    // preview would draw (the CPU run feeds the program as the preview's WGSL is fed), so neither where the program
+    // has no WGSL or its stage is not drawn: the preview's message says why
+    const drawn = !undrawable(this.primary.report) && this.progs.every((p) => !p.report.refusal && ok(p.report.wgsl));
+    const runs = drawn && (typeof preview !== 'string' || this.progs.some((p) => p.report.executors.length));
     return TABS.filter((t) => (t !== 'flow' || this.progs.some((p) => ok(p.report.analyses))) && (t !== 'run' || runs));
   }
 
@@ -593,6 +606,11 @@ export class Workspace {
     const r = this.primary.report;
     // the CPU executors read the texture slots with or without a GPU: bound now, and to the GPU once it is there
     this.bindTextures();
+    const why = undrawable(r);
+    if (why) {
+      this.previewMessage.replaceChildren(h('div.note-box', why));
+      return this.state('none');
+    }
     if (r.refusal || !ok(r.wgsl)) {
       this.previewMessage.replaceChildren(h('div.error-box', h('strong', 'No preview: '), r.refusal?.message ?? err(r.wgsl) ?? 'no WGSL'));
       this.state('failed');

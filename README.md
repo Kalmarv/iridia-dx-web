@@ -79,7 +79,9 @@ after each pin, and moving the pin moves the table with it.
   they share). `legacy.rs` holds what is not on the IR yet: the Flow analyses and the constant folding of DXBC and
   DXIL programs, on the older naga-module lift. It is deleted in one piece once those move (`tests/legacy.rs` is
   expected to fail until it is).
-- `glue/tests/refused/` holds a program iridia refuses (not an example), for the tests of how a refusal reads.
+- `glue/tests/programs/` holds programs that are not examples, for the glue's tests of how the page says what it
+  cannot do: two it lists and lifts but a browser cannot draw (an amplification program, a pixel program in doubles)
+  and one iridia refuses (a pixel program reading the render target's sample count).
 - `examples/` holds the page's examples: our own HLSL beside each compiled program, and Microsoft's listing of it
   (`.ms.txt`), which the glue's tests compare dx's listings against. `examples/build.sh` recompiles them with fxc
   and dxc; the compiled files are committed, so the page's build needs neither compiler.
