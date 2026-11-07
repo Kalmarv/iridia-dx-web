@@ -135,16 +135,39 @@ fn every_example_lifts_to_wgsl() {
             "{name}: {:?}",
             report.executors
         );
-        // the listing's instructions are tied to their bytes, where the bytecode is a token stream
-        if report.format != Format::Dxil {
-            let code = report.bytecode.instructions;
-            assert!(!code.is_empty(), "{name}: no instruction tied to its bytes");
+        // the listing's instructions are tied to their bytes: a token stream's run on from one to the next, a DXIL
+        // listing's are bitcode records in order inside the part it lists
+        let code = &report.bytecode.instructions;
+        assert!(!code.is_empty(), "{name}: no instruction tied to its bytes");
+        assert!(
+            code.iter().all(|i| i.start < i.end
+                && i.end <= report.size
+                && i.bits.0 < i.bits.1
+                && i.start == i.bits.0 / 8
+                && i.end == i.bits.1.div_ceil(8)),
+            "{name}: {code:?}"
+        );
+        if report.format == Format::Dxil {
+            let part = report.bytecode.listed_part.as_deref().unwrap_or_default();
+            let region = report
+                .bytecode
+                .regions
+                .iter()
+                .find(|r| r.tag.as_deref() == Some(part) && !r.label.contains("header"))
+                .unwrap_or_else(|| panic!("{name}: no {part} part"));
             assert!(
-                code.windows(2).all(|w| w[0].end == w[1].start),
+                code.windows(2)
+                    .all(|w| w[0].bits.1 <= w[1].bits.0 && w[0].line < w[1].line),
                 "{name}: {code:?}"
             );
             assert!(
-                code.iter().all(|i| i.start < i.end && i.end <= report.size),
+                code.iter()
+                    .all(|i| i.start >= region.start && i.end <= region.end),
+                "{name}: an instruction outside the {part} part"
+            );
+        } else {
+            assert!(
+                code.windows(2).all(|w| w[0].end == w[1].start),
                 "{name}: {code:?}"
             );
         }
@@ -154,9 +177,17 @@ fn every_example_lifts_to_wgsl() {
         if !compute {
             assert_eq!(report.executors, ["iridia-exec-ir", "iridia-exec"], "{name}");
         }
-        // the IR's lines are tied to the source instructions they came from, where the listing is tied to bytes
-        if report.format != Format::Dxil {
-            assert!(!report.lifted.unwrap().origins.is_empty(), "{name}");
+        // the IR's lines are tied to the source instructions they came from: each origin is where a listed instruction
+        // starts (where the listing is of the module lifted: dx lists a DXIL container's debug module where it has one)
+        let origins = report.lifted.unwrap().origins;
+        assert!(!origins.is_empty(), "{name}");
+        if report.bytecode.listed_part.as_deref() != Some("ILDB") {
+            let starts: std::collections::BTreeSet<usize> = code.iter().map(|i| i.bits.0).collect();
+            let loose: Vec<_> = origins.iter().filter(|(_, bit)| !starts.contains(bit)).collect();
+            assert!(
+                loose.is_empty(),
+                "{name}: IR lines whose origin starts no listed instruction: {loose:?}"
+            );
         }
     }
 }

@@ -60,11 +60,16 @@ impl IrProgram {
         })
     }
 
-    /// Lift a DXIL container's program. Its values' origins are bits of the bitcode, which the listing is not tied to.
-    pub fn dxil(bytes: &[u8], profile: iridia_naga::Profile) -> Result<IrProgram, iridia_ir::Refusal> {
+    /// Lift a DXIL container's program; `code_base` is the file byte where its DXIL part's bitcode starts, which the
+    /// lift's bit offsets count from.
+    pub fn dxil(
+        bytes: &[u8],
+        code_base: usize,
+        profile: iridia_naga::Profile,
+    ) -> Result<IrProgram, iridia_ir::Refusal> {
         Ok(IrProgram {
             lifted: iridia_dxil::ir::lift(bytes)?,
-            code_base: 0,
+            code_base,
             profile,
         })
     }

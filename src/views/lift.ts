@@ -1,7 +1,8 @@
-// The lift: iridia's program text beside its WGSL. On the IR path each value's line carries the bytecode word it came
-// from, so a line leads to its listed instruction and to every other line of that instruction; where the WGSL names
-// values after the IR (`let v12`), its lines are tied to the IR's too.
-import { h, hex } from '../dom';
+// The lift: iridia's program text beside its WGSL. On the IR path each value's line carries where its source
+// instruction starts (a token stream's word, a DXIL record's bit), so a line leads to its listed instruction and to
+// every other line of that instruction; where the WGSL names values after the IR (`let v12`), its lines are tied to the
+// IR's too.
+import { bitPlace, h } from '../dom';
 
 import type { Lifted, Report } from '../types';
 import { codePane } from './code';
@@ -30,15 +31,15 @@ export function liftView(report: Report, lifted: Lifted | null, wgsl: string | n
   const bc = report.bytecode;
   const listing = 'Ok' in bc.listing ? bc.listing.Ok.split('\n') : [];
   const origin = new Map(lifted?.origins ?? []);
-  const instructionOf = (byte: number) => bc.instructions.find((i) => byte >= i.start && byte < i.end);
+  const instructionOf = (bit: number) => bc.instructions.find((i) => bit >= i.bits[0] && bit < i.bits[1]);
   const tied = lifted?.kind === 'ir' && origin.size > 0;
+  // dx lists a container's debug module where it has one, stored apart from the DXIL part iridia lifts
+  const apart = bc.listed_part === 'ILDB';
   const strip = h(
     'div.origin-strip',
     tied
-      ? 'Click a line of the IR: its source instruction shows here, and every line it became is marked.'
-      : lifted?.kind === 'ir' && report.format === 'dxil'
-        ? "DXIL's listing is LLVM text, not tied to positions in the bitcode, so the IR's lines do not lead to it."
-        : '',
+      ? `Click a line of the IR: its source instruction shows here, and every line it became is marked.${apart ? ' The listing is of the ILDB debug module, stored apart from the DXIL part iridia lifts, so a line shows where its record is but not its listed text.' : ''}`
+      : '',
   );
   const defs = lifted ? definitions(lifted.text) : new Map<number, number>();
   const names = wgsl ? wgslNames(wgsl) : new Map<number, number>();
@@ -50,9 +51,9 @@ export function liftView(report: Report, lifted: Lifted | null, wgsl: string | n
   const select = (irLine: number | null, wgslLine: number | null) => {
     const value = irLine !== null ? valueOfLine.get(irLine) : wgslLine !== null ? wgslLineValue.get(wgslLine) : undefined;
     if (irLine === null && value !== undefined) irLine = defs.get(value) ?? null;
-    const byte = irLine !== null ? origin.get(irLine) : undefined;
-    const ins = byte !== undefined ? instructionOf(byte) : undefined;
-    const same = byte !== undefined ? [...origin].filter(([, b]) => (ins ? b >= ins.start && b < ins.end : b === byte)).map(([l]) => l) : irLine !== null ? [irLine] : [];
+    const bit = irLine !== null ? origin.get(irLine) : undefined;
+    const ins = bit !== undefined && !apart ? instructionOf(bit) : undefined;
+    const same = bit !== undefined ? [...origin].filter(([, b]) => (ins ? b >= ins.bits[0] && b < ins.bits[1] : b === bit)).map(([l]) => l) : irLine !== null ? [irLine] : [];
     irPane?.mark(same);
     if (irLine !== null) irPane?.scrollTo(irLine);
     const wlines = same.map((l) => names.get(valueOfLine.get(l) ?? -1)).filter((x): x is number => x !== undefined);
@@ -60,12 +61,13 @@ export function liftView(report: Report, lifted: Lifted | null, wgsl: string | n
     wgslPane?.mark(wlines);
     if (wlines.length) wgslPane?.scrollTo(wlines[0]);
     strip.replaceChildren();
-    if (byte === undefined) {
-      strip.append(irLine !== null ? 'This line carries no source word (a constant, or a value the passes made).' : '');
+    if (bit === undefined) {
+      strip.append(irLine !== null ? 'This line carries no source instruction (a constant, or a value the passes made).' : '');
       return;
     }
     const text = ins ? listing[ins.line]?.trim() : undefined;
-    strip.append(h('span.dim', `${hex(byte, 6)} · `), text ? h('code', text) : `word at ${hex(byte, 6)}`, h('span.dim', ` · ${same.length} IR line${same.length === 1 ? '' : 's'}`));
+    const what = report.format === 'dxil' ? 'record' : 'word';
+    strip.append(h('span.dim', `${bitPlace(bit)} · `), text ? h('code', text) : `${what} at ${bitPlace(bit)}`, h('span.dim', ` · ${same.length} IR line${same.length === 1 ? '' : 's'}`));
   };
 
   const left = lifted

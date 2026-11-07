@@ -54,6 +54,9 @@ export function clear(el: Element): void {
 /** Bytes as `0x0000ABCD`. */
 export const hex = (n: number, digits = 8): string => '0x' + n.toString(16).toUpperCase().padStart(digits, '0');
 
+/** A file bit: its byte, and the bit in it where it is not the first. */
+export const bitPlace = (bit: number, digits = 6): string => (bit % 8 ? `${hex(Math.floor(bit / 8), digits)} bit ${bit % 8}` : hex(bit / 8, digits));
+
 export const plural = (n: number, word: string, many = word + 's'): string => `${n} ${n === 1 ? word : many}`;
 
 /**

@@ -10,7 +10,8 @@ pub struct Lifted {
     pub kind: &'static str,
     /// The text.
     pub text: String,
-    /// Lines (0-based) and the file byte of the source instruction each came from.
+    /// Lines (0-based) and the file bit the source instruction each came from starts at (a token stream's
+    /// instructions start on bytes, a DXIL record inside one).
     pub origins: Vec<(usize, usize)>,
 }
 
@@ -176,7 +177,9 @@ pub fn rows(words: &[u32]) -> Vec<[u32; 4]> {
         .collect()
 }
 
-/// The line origins of an IR text: each line that defines `%n` and the file byte of value `n`'s source instruction.
+/// The line origins of an IR text: each line that defines `%n` and the file bit where value `n`'s source instruction
+/// starts. `code_base` is the file byte the lift's positions count from: its code part's data (words), or the DXIL
+/// part's bitcode (bits).
 pub fn ir_origins(text: &str, function: &iridia_ir::Function, code_base: usize) -> Vec<(usize, usize)> {
     text.lines()
         .enumerate()
@@ -188,11 +191,13 @@ pub fn ir_origins(text: &str, function: &iridia_ir::Function, code_base: usize) 
             }
             let value = function.values.get(digits.parse::<usize>().ok()?)?;
             let origin = value.origin?;
-            let byte = match origin.unit {
-                iridia_ir::Unit::Word => usize::try_from(origin.offset).ok()?.checked_mul(4)?,
-                iridia_ir::Unit::Bit | iridia_ir::Unit::Line => return None,
+            let offset = usize::try_from(origin.offset).ok()?;
+            let bit = match origin.unit {
+                iridia_ir::Unit::Word => code_base.checked_add(offset.checked_mul(4)?)?.checked_mul(8)?,
+                iridia_ir::Unit::Bit => code_base.checked_mul(8)?.checked_add(offset)?,
+                iridia_ir::Unit::Line => return None,
             };
-            Some((line, code_base.checked_add(byte)?))
+            Some((line, bit))
         })
         .collect()
 }

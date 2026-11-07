@@ -1,8 +1,10 @@
 //! What a program file is, the regions of its bytes and its Microsoft listing, with each listed instruction's bytes.
 //!
-//! The listing is dx's, byte for byte what `D3DDisassemble` or `dxc -dumpbin` writes. Its lines are tied to the bytes
-//! they decode by a second listing with `D3D_DISASM_ENABLE_INSTRUCTION_OFFSET`, which prefixes each instruction with
-//! its byte offset: where the two listings do not have the same lines, nothing is tied rather than something wrongly.
+//! The listing is dx's, byte for byte what `D3DDisassemble` or `dxc -dumpbin` writes. A token stream's lines are tied
+//! to the bytes they decode by a second listing with `D3D_DISASM_ENABLE_INSTRUCTION_OFFSET`, which prefixes each
+//! instruction with its byte offset: where the two listings do not have the same lines, nothing is tied rather than
+//! something wrongly. A DXIL listing's instructions are LLVM bitcode records, which start and end inside bytes: dx
+//! states each one's bits.
 
 use serde::Serialize;
 
@@ -62,6 +64,9 @@ pub struct Instruction {
     pub start: usize,
     /// One past its last byte.
     pub end: usize,
+    /// Its bits in the file, first and one past the last (bit `b` is bit `b % 8` of byte `b / 8`): a token stream's
+    /// are its bytes', a DXIL record's start and end inside bytes, so two records can share a byte.
+    pub bits: (usize, usize),
 }
 
 /// The file's regions, listing and instruction map.
@@ -71,10 +76,12 @@ pub struct Bytecode {
     pub regions: Vec<Region>,
     /// The listing, or why dx could not write it.
     pub listing: Result<String, String>,
-    /// Each listed instruction's bytes; empty where the listing's lines cannot be tied to bytes (DXIL, whose
-    /// instructions are LLVM bitcode records).
+    /// Each listed instruction's bytes, in listing order; empty where the listing's lines cannot be tied to bytes.
     pub instructions: Vec<Instruction>,
-    /// Where the instruction offsets the listing states count from: the code part's data, or 0 for a token stream.
+    /// The part a DXIL listing lists: `ILDB`, the debug module, where the container has one, else `DXIL`.
+    pub listed_part: Option<String>,
+    /// Where the lift's positions count from: the code part's data (words), the `DXIL` part's bitcode (bits), or 0
+    /// for a token stream.
     pub code_base: usize,
 }
 
@@ -114,6 +121,19 @@ fn part_label(tag: &str) -> &'static str {
     }
 }
 
+/// Where the lift's positions in `bytes` count from (see [`Bytecode::code_base`]).
+pub fn code_base(bytes: &[u8], format: Format) -> usize {
+    match format {
+        Format::Dxbc => dxcontainer::chunks(bytes)
+            .unwrap_or_default()
+            .iter()
+            .find(|c| &c.kind == b"SHDR" || &c.kind == b"SHEX")
+            .map_or(0, |c| offset_in(bytes, c.data)),
+        Format::Dxil => dxil_reader::part(bytes).map_or(0, |p| offset_in(bytes, p.bitcode)),
+        Format::D3d9 => 0,
+    }
+}
+
 /// The regions, listing and instruction map of `bytes` of format `format`.
 pub fn bytecode(bytes: &[u8], format: Format) -> Bytecode {
     match format {
@@ -124,7 +144,7 @@ pub fn bytecode(bytes: &[u8], format: Format) -> Bytecode {
 
 fn container(bytes: &[u8], format: Format) -> Bytecode {
     let mut regions = Vec::new();
-    let mut code_base = 0;
+    let code_base = code_base(bytes, format);
     let parts = dxcontainer::chunks(bytes).unwrap_or_default();
     let directory_end = 32usize.saturating_add(parts.len().saturating_mul(4));
     regions.push(Region {
@@ -142,9 +162,6 @@ fn container(bytes: &[u8], format: Format) -> Bytecode {
     for part in &parts {
         let start = offset_in(bytes, part.data);
         let name = tag(&part.kind);
-        if name == "SHDR" || name == "SHEX" {
-            code_base = start;
-        }
         regions.push(Region {
             label: format!("{name} part header: tag and size"),
             tag: Some(name.clone()),
@@ -160,12 +177,26 @@ fn container(bytes: &[u8], format: Format) -> Bytecode {
     }
     match format {
         Format::Dxil => {
-            let listing = dxil_reader::disasm::disassemble(bytes).map_err(|e| e.to_string());
-            Bytecode {
-                regions,
-                listing,
-                instructions: Vec::new(),
-                code_base,
+            match dxil_reader::disasm::disassemble_with_positions(bytes) {
+                Ok(p) => {
+                    // the listed part's bitcode: the DXIL part's, or ILDB's where it is listed
+                    let base = p.bitcode.saturating_mul(8);
+                    Bytecode {
+                        regions,
+                        instructions: p.instructions.iter().map(|i| record(i, base)).collect(),
+                        listing: Ok(p.text),
+                        listed_part: Some(tag(&p.part)),
+                        code_base,
+                    }
+                }
+                // the plain listing, untied, where dx could not place its instructions
+                Err(_) => Bytecode {
+                    regions,
+                    listing: dxil_reader::disasm::disassemble(bytes).map_err(|e| e.to_string()),
+                    instructions: Vec::new(),
+                    listed_part: None,
+                    code_base,
+                },
             }
         }
         _ => {
@@ -185,9 +216,21 @@ fn container(bytes: &[u8], format: Format) -> Bytecode {
                 regions,
                 listing,
                 instructions,
+                listed_part: None,
                 code_base,
             }
         }
+    }
+}
+
+/// A listed DXIL record, its bits counted from file bit `base`.
+fn record(i: &dxil_reader::disasm::Listed, base: usize) -> Instruction {
+    let bits = (base.saturating_add(i.at), base.saturating_add(i.end));
+    Instruction {
+        line: i.line,
+        start: bits.0 / 8,
+        end: bits.1.div_ceil(8),
+        bits,
     }
 }
 
@@ -263,6 +306,7 @@ fn token_stream(bytes: &[u8]) -> Bytecode {
         regions,
         listing,
         instructions,
+        listed_part: None,
         code_base: 0,
     }
 }
@@ -306,6 +350,7 @@ fn tie(plain: &str, offsets: &str, base: usize, end: usize) -> Vec<Instruction> 
             line,
             start,
             end: next,
+            bits: (start.saturating_mul(8), next.saturating_mul(8)),
         });
     }
     out

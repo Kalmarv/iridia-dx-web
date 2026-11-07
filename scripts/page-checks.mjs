@@ -1,7 +1,7 @@
-// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage,dropped]: the
-// page's checks in Chrome. In a Chrome without WebGPU (--disable-features=WebGPU: no adapter) run wording, fallback,
-// coverage and dropped, and again with
-// --remove-gpu, which deletes navigator.gpu before the page loads (as in a browser with no WebGPU at all).
+// node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,ties,fallback,coverage,dropped]:
+// the page's checks in Chrome. In a Chrome without WebGPU (--disable-features=WebGPU: no adapter) run wording,
+// fallback, coverage and dropped, and again with --remove-gpu, which deletes navigator.gpu before the page loads (as in
+// a browser with no WebGPU at all).
 //
 // - wording: no text the page shows, on the examples route or any tab of any example (with every constant pinned and a
 //   pixel run), names naga or says something is not yet done, unsupported or refused. The Coverage route is iridia's
@@ -20,14 +20,17 @@
 // - scroll: selecting a listing line brings its bytes into view in the bytes pane, centred; selecting bytes or a
 //   region brings its line into the listing; at the start, middle and end of several examples, at desktop and phone
 //   widths and after a resize. A wheel over a pane scrolls that pane only, the page scrolls outside them, nothing
-//   scrolls back on its own, and the keyboard scrolls the focused listing.
+//   scrolls back on its own, and the keyboard scrolls the focused listing. DXIL's listing is tied by bits, its records
+//   sharing the bytes at their edges.
+// - ties: on every example, an IR line of the Lift tab leads to its source instruction: the strip shows a line the
+//   Bytecode tab's listing ties to bytes, and the IR lines of that instruction are marked, the clicked one among them.
 // - fallback (a Chrome without WebGPU): each example opens with a note in place of the preview, not an error; every
 //   tab shows its content with no error; Run runs the CPU executors and shows their outputs.
 import { cli, connect, examples, SETTLE } from './browser.mjs';
 import { join } from 'node:path';
 import { iridiaRev, web } from './iridia.mjs';
 
-const { page, flag, port } = cli('node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,fallback,coverage,dropped]');
+const { page, flag, port } = cli('node scripts/page-checks.mjs PAGE_URL [--cdp PORT] [--only wording,progress,scroll,ties,fallback,coverage,dropped]');
 const only = flag('--only')?.split(',');
 const b = await connect(port);
 const failures = [];
@@ -438,13 +441,17 @@ async function click(selector, index) {
   return true;
 }
 
-async function scrollChecks(ids, label) {
-  for (const ex of ids) {
+async function scrollChecks(names, label) {
+  for (const ex of names) {
+    if (!ids.includes(ex)) {
+      fail(`scroll ${label} · ${ex}`, 'no such example');
+      continue;
+    }
     await route(`#/example/${ex}`);
     await tab('bytecode');
     const rows = await b.call(`function () { return [...document.querySelectorAll('.bytecode .code-row')].map((r, i) => r.classList.contains('linked') ? i : -1).filter((i) => i >= 0); }`);
     if (!rows.length) {
-      pass(`scroll ${label} · ${ex}: no listing line tied to bytes (DXIL)`);
+      fail(`scroll ${label} · ${ex}`, 'no listing line tied to bytes');
       continue;
     }
     // listing -> bytes, at the start, middle and end
@@ -530,6 +537,37 @@ async function scrollChecks(ids, label) {
   }
 }
 
+async function ties(ids) {
+  for (const ex of ids) {
+    await route(`#/example/${ex}`);
+    await tab('bytecode');
+    const listed = await b.call(`function () { return [...document.querySelectorAll('.bytecode .code-row.linked')].map((r) => [...r.childNodes].slice(1).map((n) => n.textContent).join('').trim()); }`);
+    await tab('lift');
+    const IR = `const ir = document.querySelector('.lift .split .col .code'); const rows = ir ? [...ir.querySelectorAll('.code-row')] : [];`;
+    const linked = await b.call(`function () { ${IR} return rows.map((r, i) => (r.classList.contains('linked') ? i : -1)).filter((i) => i >= 0); }`);
+    if (!listed.length || !linked.length) {
+      fail(`ties · ${ex}`, `${listed.length} listing lines tied to bytes, ${linked.length} IR lines tied to them`);
+      continue;
+    }
+    for (const [where, line] of [['first', linked[0]], ['middle', linked[linked.length >> 1]], ['last', linked[linked.length - 1]]]) {
+      const r = await b.call(
+        `async function (line) { ${IR}
+        rows[line].click();
+        await new Promise((r) => requestAnimationFrame(r));
+        const strip = document.querySelector('.lift .origin-strip');
+        return { code: strip?.querySelector('code')?.textContent ?? null, strip: strip?.textContent ?? '', marked: rows.map((r, i) => (r.classList.contains('hl') ? i : -1)).filter((i) => i >= 0) };
+      }`,
+        line,
+      );
+      const what = `ties · ${ex} · IR line ${line + 1} (${where})`;
+      if (r.code === null) fail(what, `no listed instruction shown (${r.strip})`);
+      else if (!listed.includes(r.code.trim())) fail(what, `shows "${r.code}", which is no listing line tied to bytes`);
+      else if (!r.marked.includes(line)) fail(what, `marks lines ${r.marked.map((l) => l + 1)} but not the one clicked`);
+      else pass(`${what} -> ${r.code.trim().slice(0, 60)} (${r.marked.length} IR line${r.marked.length === 1 ? '' : 's'})`);
+    }
+  }
+}
+
 async function wheelAndKeys(ex, label) {
   await route(`#/example/${ex}`);
   await tab('bytecode');
@@ -598,15 +636,19 @@ if (want('wording')) {
   await wording(ids);
 }
 if (want('scroll')) {
-  const some = ids.filter((id) => ['plasma', 'lit-brick', 'd3d9-pair', 'd3d9-ps2', 'd3d9-ps1', 'compute-fractal', 'post'].includes(id));
+  // every example at desktop width: each format's listing (DXIL's tied by bits) and each stage
   await viewport(1400, 900);
-  await scrollChecks(some, 'desktop');
+  await scrollChecks(ids, 'desktop');
   await wheelAndKeys('plasma', 'desktop');
   await viewport(1000, 800);
   await scrollChecks(['plasma', 'd3d9-pair'], 'after a resize to 1000');
   await viewport(390, 844, true);
   await scrollChecks(['plasma', 'lit-brick'], 'phone');
   await wheelAndKeys('plasma', 'phone');
+}
+if (want('ties')) {
+  await viewport(1400, 900);
+  await ties(ids);
 }
 if (want('fallback')) {
   await viewport(1400, 900);

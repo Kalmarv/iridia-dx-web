@@ -63,9 +63,11 @@ export interface Interface {
 }
 
 export interface Region { label: string; tag: string | null; start: number; end: number }
-export interface Instruction { line: number; start: number; end: number }
-export interface Bytecode { regions: Region[]; listing: Result<string>; instructions: Instruction[]; code_base: number }
+/** A listed instruction: its line, its bytes, and its bits in the file (a DXIL record starts and ends inside bytes). */
+export interface Instruction { line: number; start: number; end: number; bits: [number, number] }
+export interface Bytecode { regions: Region[]; listing: Result<string>; instructions: Instruction[]; listed_part: string | null; code_base: number }
 
+/** A lifted program's text; `origins` are lines and the file bit their source instruction starts at. */
 export interface Lifted { kind: 'ir' | 'legacy'; text: string; origins: [number, number][] }
 
 export interface Io {

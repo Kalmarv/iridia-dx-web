@@ -8,10 +8,11 @@ Drop a compiled Direct3D shader (DXBC, DXIL or Direct3D 9) onto the page, or ope
 lift it and run it, all in the page as WebAssembly with no server:
 
 - **Bytecode** ([dx](https://github.com/Kalmarv/dx)): the container's parts, the bytes, and the disassembly exactly as
-  Microsoft's tools write it, each instruction tied to its bytes.
+  Microsoft's tools write it, each instruction tied to its bytes (a DXIL instruction, an LLVM bitcode record, to its
+  bits).
 - **Lift, Specialise, Flow, Run** ([iridia](https://github.com/Kalmarv/iridia)): the program iridia lifts and the WGSL
-  it writes, the program with its constants pinned, how each value reaches the output, and one pixel run on the CPU
-  beside the GPU's.
+  it writes, each IR line tied to the instruction it came from, the program with its constants pinned, how each value
+  reaches the output, and one pixel run on the CPU beside the GPU's.
 - A live WebGPU preview on a screen quad or a mesh, with the program's constants and textures as controls. Without
   WebGPU everything but the preview works, and Run runs the CPU executors alone.
 - **Coverage** (`#/coverage`): iridia's coverage table at the commit the page is built from: each run of vkd3d's
@@ -55,15 +56,15 @@ it shows a visitor a blank preview that a check can't see. On Linux:
 xvfb-run -a google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/checks \
   --enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan --enable-gpu --ignore-gpu-blocklist &
 node scripts/variants.mjs http://127.0.0.1:5173/ --cdp 9222     # every preview the toolbar reaches: drawn, no WebGPU error
-node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222  # wording, coverage, the loading bar, linked scrolling
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222  # wording, coverage, loading bar, scrolling, IR ties
 ```
 
 Without WebGPU the page keeps everything but the preview. Check that in a Chrome started with
 `--disable-features=WebGPU`, and again with `navigator.gpu` removed:
 
 ```sh
-node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording,coverage
-node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording,coverage --remove-gpu
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording,coverage,dropped
+node scripts/page-checks.mjs http://127.0.0.1:5173/ --cdp 9222 --only fallback,wording,coverage,dropped --remove-gpu
 ```
 
 The Coverage route reads iridia's `docs/coverage/coverage.json` at the commit `glue/Cargo.toml` pins iridia to:

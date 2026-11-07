@@ -1,6 +1,6 @@
 // The bytes beside dx's listing: the file's regions (container parts, or a token stream's version, comments and code)
 // banded over a hex dump, and each listed instruction tied to its bytes both ways.
-import { h, hex, plural, scrollRowsIntoView } from '../dom';
+import { bitPlace, h, hex, plural, scrollRowsIntoView } from '../dom';
 import { listingLang } from '../highlight';
 import type { Report } from '../types';
 import { codePane } from './code';
@@ -15,6 +15,7 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
   bc.regions.forEach((r, i) => {
     for (let b = r.start; b < Math.min(r.end, bytes.length); b++) regionAt[b] = i;
   });
+  // a byte two DXIL records share is the later one's: the one that starts in it
   const instrAt = new Int32Array(bytes.length).fill(-1);
   bc.instructions.forEach((ins, i) => {
     for (let b = ins.start; b < Math.min(ins.end, bytes.length); b++) instrAt[b] = i;
@@ -62,9 +63,11 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
 
   const listingText = 'Ok' in bc.listing ? bc.listing.Ok : null;
   const linked = new Set(bc.instructions.map((i) => i.line));
-  const describe = (start: number, end: number) => {
+  const describe = (start: number, end: number, bits?: [number, number]) => {
     const r = regionAt[start];
-    status.textContent = `${hex(start, 6)}–${hex(end - 1, 6)} · ${plural(end - start, 'byte')}${r >= 0 ? ` · ${bc.regions[r].label}` : ''}`;
+    // a record that does not fill its bytes says which of their bits are its own
+    const own = bits && (bits[0] % 8 || bits[1] % 8) ? ` · ${plural(bits[1] - bits[0], 'bit')} from ${bitPlace(bits[0])}` : '';
+    status.textContent = `${hex(start, 6)}–${hex(end - 1, 6)} · ${plural(end - start, 'byte')}${own}${r >= 0 ? ` · ${bc.regions[r].label}` : ''}`;
   };
   const pane = listingText
     ? codePane(listingText, listingLang(report.format), {
@@ -76,8 +79,8 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
           if (i >= 0) {
             const ins = bc.instructions[i];
             markBytes(ins.start, ins.end);
-            describe(ins.start, ins.end);
-          } else status.textContent = report.format === 'dxil' ? 'DXIL instructions are LLVM bitcode records: not tied to bytes.' : 'This line decodes no instruction bytes of its own.';
+            describe(ins.start, ins.end, ins.bits);
+          } else status.textContent = report.format === 'dxil' ? 'This line is no instruction of a function body: only those are records tied to bits.' : 'This line decodes no instruction bytes of its own.';
         },
       })
     : null;
@@ -91,7 +94,7 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
       pane.mark([ins.line]);
       pane.scrollTo(ins.line);
       markBytes(ins.start, ins.end);
-      describe(ins.start, ins.end);
+      describe(ins.start, ins.end, ins.bits);
     } else {
       const r = regionAt[b];
       if (r >= 0) {
@@ -129,7 +132,10 @@ export function bytecodeView(report: Report, bytes: Uint8Array, focusByte: numbe
   );
 
   const notes: HTMLElement[] = [];
-  if (report.format === 'dxil') notes.push(h('p.note', 'DXIL is LLVM bitcode: its instructions are bit-packed records, so listing lines are not tied to bytes. The parts are.'));
+  if (report.format === 'dxil' && bc.instructions.length) {
+    notes.push(h('p.note', 'DXIL is LLVM bitcode: its instructions are bit-packed records, which start and end inside bytes, so a byte at the edge of two records is shared. A shared byte leads to the record that starts in it.'));
+    if (bc.listed_part === 'ILDB') notes.push(h('p.note', 'The listing is of the ILDB part, the debug module, which dx lists where the container has one. iridia lifts the DXIL part, stored apart from it.'));
+  } else if (report.format === 'dxil' && listingText) notes.push(h('p.note', 'dx could not place this listing\'s instructions in the bitcode, so its lines are not tied to bytes. The parts are.'));
   else if (!bc.instructions.length && listingText) notes.push(h('p.note', 'The listing could not be tied to bytes (its offset listing did not line up), so nothing is tied rather than something wrongly.'));
   if (focusByte !== null && focusByte < bytes.length) notes.push(h('p.note.bad', `The refusal names byte ${hex(focusByte, 6)}: marked in red.`));
 

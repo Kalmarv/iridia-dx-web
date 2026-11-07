@@ -89,11 +89,12 @@ pub struct Shader {
     textures: Textures,
 }
 
-/// The file byte a refusal names: a word of a token stream counts from the code's start.
+/// The file byte a refusal names: a word of a token stream counts from the code's start, a bit of DXIL from the DXIL
+/// part's bitcode.
 fn refused(r: &iridia_ir::Refusal, code_base: usize) -> Refused {
     let byte = match r.unit {
         iridia_ir::Unit::Word => r.at.checked_mul(4).and_then(|b| b.checked_add(code_base)),
-        iridia_ir::Unit::Bit => Some(r.at / 8),
+        iridia_ir::Unit::Bit => code_base.checked_add(r.at / 8),
         iridia_ir::Unit::Line => None,
     };
     Refused {
@@ -110,11 +111,11 @@ impl Shader {
         let (ir, naga) = match format {
             Format::D3d9 => (IrProgram::d3d9(&bytes, profile), None),
             Format::Dxbc => (
-                IrProgram::dxbc(&bytes, container::bytecode(&bytes, format).code_base, profile),
+                IrProgram::dxbc(&bytes, container::code_base(&bytes, format), profile),
                 Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string())),
             ),
             Format::Dxil => (
-                IrProgram::dxil(&bytes, profile),
+                IrProgram::dxil(&bytes, container::code_base(&bytes, format), profile),
                 Some(NagaProgram::dxil(&bytes).map_err(|r| r.to_string())),
             ),
         };
