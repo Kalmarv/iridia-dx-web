@@ -2,8 +2,8 @@
 //!
 //! DXBC and DXIL lift into naga modules here (`iridia-dxbc`, `iridia-dxil`). For DXBC the IR lift is the program shown
 //! and run, and this module gives only the analyses (what reaches each output lane, how a constant buffer holds a
-//! matrix) and the specialisation of constant words; for DXIL and a DXBC compute program it gives everything, the
-//! `iridia-exec` run of the module included. When the IR has its own analyses and constant folding and DXIL lifts onto
+//! matrix) and the specialisation of constant words; for DXIL it gives everything, the `iridia-exec` run of the module
+//! included. When the IR has its own analyses and constant folding and DXIL lifts onto
 //! it, this module is deleted: `tests/legacy.rs` fails once it is gone, as a reminder to make that test the check that
 //! it stays gone.
 

@@ -109,16 +109,14 @@ impl Shader {
         let format = Format::of(&bytes)?;
         let (ir, naga) = match format {
             Format::D3d9 => (Some(IrProgram::d3d9(&bytes)), None),
-            // the IR lift is the program shown and run, and the old one gives the analyses and the constant folding;
-            // a compute program stays on the old path until iridia-naga writes WGSL for compute IR
-            Format::Dxbc => {
-                let ir = IrProgram::dxbc(&bytes, container::bytecode(&bytes, format).code_base);
-                let naga = Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string()));
-                match &ir {
-                    Ok(p) if p.interface().stage == Stage::Compute => (None, naga),
-                    _ => (Some(ir), naga),
-                }
-            }
+            // the IR lift is the program shown and run, and the old one gives the analyses and the constant folding
+            Format::Dxbc => (
+                Some(IrProgram::dxbc(
+                    &bytes,
+                    container::bytecode(&bytes, format).code_base,
+                )),
+                Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string())),
+            ),
             Format::Dxil => (None, Some(NagaProgram::dxil(&bytes).map_err(|r| r.to_string()))),
         };
         Ok(Shader {

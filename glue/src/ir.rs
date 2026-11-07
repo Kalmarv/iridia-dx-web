@@ -3,7 +3,7 @@
 //!
 //! Direct3D 9 and DXBC programs take this path; DXIL joins it when its reader lifts into the IR (see `legacy`).
 
-use iridia_ir::interface::{Interface, ResourceId, ResourceKind};
+use iridia_ir::interface::{Interface, ResourceId, ResourceKind, Stage};
 
 use crate::sampling::Textures;
 use crate::view::{
@@ -182,9 +182,13 @@ impl IrProgram {
         })
     }
 
-    /// The CPU executors that run the program with `state` folded: `iridia-exec-ir` always, and `iridia-exec` where
-    /// it compiles the program (a pixel or vertex program).
+    /// The CPU executors that run the program with `state` folded: for a vertex or pixel program `iridia-exec-ir`,
+    /// and `iridia-exec` where it compiles the program; none for a compute program.
     pub fn executors(&self, state: &[(ResourceId, [u64; 4])]) -> Vec<&'static str> {
+        // the page's CPU run is one invocation's inputs and outputs, which a compute program has none of
+        if self.interface().stage == Stage::Compute {
+            return Vec::new();
+        }
         let mut out = vec!["iridia-exec-ir"];
         if self.prepared(state).is_ok_and(|p| self.compiled(&p).is_ok()) {
             out.push("iridia-exec");
@@ -200,19 +204,21 @@ impl IrProgram {
             .iter()
             .map(|(r, lanes)| (ResourceId(*r), lanes.map(u64::from)))
             .collect();
-        let mut out = vec![Executed {
-            executor: "iridia-exec-ir",
-            runs: "the IR program, interpreted",
-            lanes: self.run(request, textures),
-        }];
-        if self.executors(&known).contains(&"iridia-exec") {
-            out.push(Executed {
-                executor: "iridia-exec",
-                runs: "the IR program, compiled",
-                lanes: self.run_compiled(request, textures),
-            });
-        }
-        out
+        self.executors(&known)
+            .into_iter()
+            .map(|executor| match executor {
+                "iridia-exec-ir" => Executed {
+                    executor,
+                    runs: "the IR program, interpreted",
+                    lanes: self.run(request, textures),
+                },
+                _ => Executed {
+                    executor,
+                    runs: "the IR program, compiled",
+                    lanes: self.run_compiled(request, textures),
+                },
+            })
+            .collect()
     }
 
     /// `p` compiled by `iridia-exec`, its exits as `break_flags` leaves them.

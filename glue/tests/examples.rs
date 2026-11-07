@@ -110,11 +110,13 @@ fn every_example_lifts_to_wgsl() {
                 "{name}: {code:?}"
             );
         }
-        // Direct3D 9 and DXBC programs are on the IR, run by its interpreter and by iridia-exec compiled from it,
-        // but for a compute program, which iridia-naga does not write yet
-        if report.format != Format::Dxil && !compute {
+        // Direct3D 9 and DXBC programs are on the IR, a vertex or pixel program run by its interpreter and by
+        // iridia-exec compiled from it
+        if report.format != Format::Dxil {
             assert_eq!(report.path, "ir", "{name}");
-            assert_eq!(report.executors, ["iridia-exec-ir", "iridia-exec"], "{name}");
+            if !compute {
+                assert_eq!(report.executors, ["iridia-exec-ir", "iridia-exec"], "{name}");
+            }
         }
         // the IR's lines are tied to the source instructions they came from
         if report.path == "ir" {
@@ -279,7 +281,8 @@ fn the_cpu_executors_agree_on_every_example_on_the_ir() {
         let bytes = std::fs::read(&path).unwrap();
         let mut shader = open(&path);
         let report = shader.report();
-        if report.path != "ir" {
+        // a compute program (julia) has no CPU run on the page: its GPU run is checked by scripts/variants.mjs
+        if report.path != "ir" || report.executors.is_empty() {
             continue;
         }
         let interface = report.interface.as_ref().unwrap();
