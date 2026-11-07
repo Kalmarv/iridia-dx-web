@@ -312,6 +312,10 @@ async function dropped() {
   let v = await preview();
   if (v.state !== 'none' || !/no amplification stage/.test(v.note) || v.error) fail('dropped · amplification · preview', JSON.stringify(v));
   else pass('dropped · amplification · a note in place of the preview: WebGPU has no amplification stage');
+  // dxc's name for the target, as_6_5 (a compute target, cs_6_5, would say the stage wrongly)
+  const named = await b.call(`function () { return /\\bas_6_5\\b/.test(document.querySelector('.workspace')?.innerText ?? ''); }`);
+  if (!named) fail('dropped · amplification · target', 'the page does not name its target as_6_5');
+  else pass('dropped · amplification · names its target as_6_5');
   const shown = await tabs();
   if (shown.includes('run')) fail('dropped · amplification · tabs', `a Run tab, where nothing runs: ${shown}`);
   else pass(`dropped · amplification · no Run tab: ${shown.join(', ')}`);

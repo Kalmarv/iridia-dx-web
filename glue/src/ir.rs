@@ -103,14 +103,8 @@ impl IrProgram {
         if !state.is_empty() {
             iridia_passes::specialise(&mut p, state).map_err(|e| format!("specialise: {e}"))?;
         }
-        // a DXIL lift's body is a control flow graph: structurize gives it WGSL's structured flow (a structured body is
-        // left as it is), and break_flags turns its exits into the flags both the WGSL writer and iridia-exec take
-        for f in std::iter::once(&mut p.entry).chain(p.patch.as_mut()) {
-            iridia_passes::structurize(f).map_err(|e| format!("structurize: {e}"))?;
-            iridia_passes::promote(f).map_err(|e| format!("promote: {e}"))?;
-            iridia_passes::simplify(f);
-            iridia_passes::break_flags(f).map_err(|e| format!("break_flags: {e}"))?;
-        }
+        // the form the WGSL writer and iridia-exec take: a DXIL lift's control flow graph structured, exits as flags
+        iridia_passes::prepare(&mut p)?;
         if let Err(problems) = iridia_ir::validate(&p) {
             let first = problems.first().map(ToString::to_string).unwrap_or_default();
             return Err(format!("the IR does not validate: {first}"));
