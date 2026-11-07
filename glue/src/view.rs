@@ -62,8 +62,6 @@ pub struct Wgsl {
 /// A vertex program's WGSL written for the pixel program it feeds.
 #[derive(Clone, Debug, Serialize)]
 pub struct Linked {
-    /// The path both programs took: `ir` or `legacy`.
-    pub path: &'static str,
     /// The vertex program's WGSL: its resources after the pixel program's in each bind group, its outputs where the
     /// pixel program reads them. `outputs` lists the built-ins and what the pixel program reads (an output it does not
     /// read is written after those, and read by nothing).

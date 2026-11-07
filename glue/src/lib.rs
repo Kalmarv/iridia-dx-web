@@ -1,10 +1,9 @@
 //! The wasm glue of iridia's web demo: what the page asks of a dropped shader, answered with iridia's and dx's
 //! public crates and handed back as JSON.
 //!
-//! A [`Shader`] holds the file's bytes and its lifts. Direct3D 9 and DXBC programs take iridia's IR pipeline ([`ir`]):
-//! the lift, its WGSL and the CPU runs. DXIL takes the naga-module crates until its reader lifts into the IR
-//! ([`legacy`]), which also gives every program the analyses and the constant-word specialisation the IR does not
-//! have yet. The bytes, listing and regions come from dx ([`container`]).
+//! A [`Shader`] holds the file's bytes and its lifts. Every program takes iridia's IR pipeline ([`ir`]): the lift, its
+//! WGSL and the CPU runs. The naga-module crates ([`legacy`]) give DXBC and DXIL programs the analyses and the
+//! constant-word specialisation the IR does not have yet. The bytes, listing and regions come from dx ([`container`]).
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
 
 pub mod container;
@@ -55,8 +54,6 @@ pub struct Report {
     pub target: Option<String>,
     /// The lifter that made the program shown, and its version.
     pub lifter: Option<String>,
-    /// Which path lifted it: `ir` or `naga`.
-    pub path: &'static str,
     /// Regions, listing and instruction map.
     pub bytecode: Bytecode,
     /// The interface, where the program lifted.
@@ -85,7 +82,9 @@ pub struct Report {
 pub struct Shader {
     bytes: Vec<u8>,
     format: Format,
-    ir: Option<Result<IrProgram, iridia_ir::Refusal>>,
+    /// The lift onto the IR: the program shown and run.
+    ir: Result<IrProgram, iridia_ir::Refusal>,
+    /// The naga-module lift of a DXBC or DXIL program, for the analyses and the constant folding.
     naga: Option<Result<NagaProgram, String>>,
     textures: Textures,
 }
@@ -108,16 +107,15 @@ impl Shader {
     pub fn open(bytes: Vec<u8>) -> Result<Shader, String> {
         let format = Format::of(&bytes)?;
         let (ir, naga) = match format {
-            Format::D3d9 => (Some(IrProgram::d3d9(&bytes)), None),
-            // the IR lift is the program shown and run, and the old one gives the analyses and the constant folding
+            Format::D3d9 => (IrProgram::d3d9(&bytes), None),
             Format::Dxbc => (
-                Some(IrProgram::dxbc(
-                    &bytes,
-                    container::bytecode(&bytes, format).code_base,
-                )),
+                IrProgram::dxbc(&bytes, container::bytecode(&bytes, format).code_base),
                 Some(NagaProgram::dxbc(&bytes).map_err(|r| r.to_string())),
             ),
-            Format::Dxil => (None, Some(NagaProgram::dxil(&bytes).map_err(|r| r.to_string()))),
+            Format::Dxil => (
+                IrProgram::dxil(&bytes),
+                Some(NagaProgram::dxil(&bytes).map_err(|r| r.to_string())),
+            ),
         };
         Ok(Shader {
             bytes,
@@ -130,7 +128,7 @@ impl Shader {
 
     /// The pipeline state the program reads, with Direct3D 9's defaults.
     fn state(&self) -> Vec<State> {
-        let Some(Ok(ir)) = &self.ir else {
+        let Ok(ir) = &self.ir else {
             return Vec::new();
         };
         ir.interface()
@@ -168,110 +166,53 @@ impl Shader {
             Some(Err(e)) => Err(e.clone()),
             None => Err("the analyses do not read IR programs".to_owned()),
         };
-        let executors = match (&self.ir, &self.naga) {
-            (Some(Ok(ir)), _) => ir.executors(&self.default_pins().known_state()),
-            (None, Some(Ok(n))) if n.runs() => vec!["iridia-exec"],
-            _ => Vec::new(),
+        let (executors, needs_quad) = match &self.ir {
+            Ok(ir) => (ir.executors(&self.default_pins().known_state()), ir.needs_quad()),
+            Err(_) => (Vec::new(), false),
         };
-        let needs_quad = match (&self.ir, &self.naga) {
-            (Some(Ok(ir)), _) => ir.needs_quad(),
-            (_, Some(Ok(n))) => n.needs_quad(),
-            _ => false,
-        };
-        match (&self.ir, &self.naga) {
-            (Some(ir), _) => {
-                let (interface, refusal, lifted, wgsl, notes, target, lifter) = match ir {
-                    Ok(p) => {
-                        let prepared = p.prepared(&self.default_pins().known_state());
-                        let lifted = prepared.as_ref().map(|q| p.text(q)).map_err(Clone::clone);
-                        let wgsl = prepared.and_then(|q| p.wgsl(&q));
-                        (
-                            Some(p.interface().clone()),
-                            None,
-                            lifted,
-                            wgsl,
-                            p.notes().to_vec(),
-                            Some(p.target().to_owned()),
-                            Some(p.lifter()),
-                        )
-                    }
-                    Err(r) => {
-                        let refusal = refused(r, code_base);
-                        (
-                            None,
-                            Some(refusal.clone()),
-                            Err(refusal.message.clone()),
-                            Err(refusal.message),
-                            Vec::new(),
-                            None,
-                            None,
-                        )
-                    }
-                };
-                Report {
-                    format: self.format,
-                    size: self.bytes.len(),
-                    target,
-                    lifter,
-                    path: "ir",
-                    bytecode,
-                    interface,
-                    refusal,
+        let (interface, refusal, lifted, wgsl, notes, target, lifter) = match &self.ir {
+            Ok(p) => {
+                let prepared = p.prepared(&self.default_pins().known_state());
+                let lifted = prepared.as_ref().map(|q| p.text(q)).map_err(Clone::clone);
+                let wgsl = prepared.and_then(|q| p.wgsl(&q));
+                (
+                    Some(p.interface().clone()),
+                    None,
                     lifted,
                     wgsl,
-                    notes,
-                    state,
-                    analyses,
-                    executors,
-                    needs_quad,
-                }
+                    p.notes().to_vec(),
+                    Some(p.target().to_owned()),
+                    Some(p.lifter()),
+                )
             }
-            (None, naga) => {
-                let lift = naga.as_ref().map(|n| n.as_ref());
-                let refusal = match &lift {
-                    Some(Err(message)) => Some(Refused {
-                        message: (*message).clone(),
-                        byte: None,
-                    }),
-                    _ => None,
-                };
-                let (interface, lifted, wgsl, notes, target, lifter) = match lift {
-                    Some(Ok(n)) => (
-                        Some(n.interface().clone()),
-                        n.text(),
-                        n.wgsl(),
-                        n.notes().to_vec(),
-                        Some(n.target().to_owned()),
-                        Some(n.lifter()),
-                    ),
-                    Some(Err(e)) => (None, Err(e.clone()), Err(e.clone()), Vec::new(), None, None),
-                    None => (
-                        None,
-                        Err("no lift".to_owned()),
-                        Err("no lift".to_owned()),
-                        Vec::new(),
-                        None,
-                        None,
-                    ),
-                };
-                Report {
-                    format: self.format,
-                    size: self.bytes.len(),
-                    target,
-                    lifter,
-                    path: "legacy",
-                    bytecode,
-                    interface,
-                    refusal,
-                    lifted,
-                    wgsl,
-                    notes,
-                    state,
-                    analyses,
-                    executors,
-                    needs_quad,
-                }
+            Err(r) => {
+                let refusal = refused(r, code_base);
+                (
+                    None,
+                    Some(refusal.clone()),
+                    Err(refusal.message.clone()),
+                    Err(refusal.message),
+                    Vec::new(),
+                    None,
+                    None,
+                )
             }
+        };
+        Report {
+            format: self.format,
+            size: self.bytes.len(),
+            target,
+            lifter,
+            bytecode,
+            interface,
+            refusal,
+            lifted,
+            wgsl,
+            notes,
+            state,
+            analyses,
+            executors,
+            needs_quad,
         }
     }
 
@@ -282,7 +223,7 @@ impl Shader {
             return Some(n.specialise(pins));
         }
         match &self.ir {
-            Some(Ok(p)) => {
+            Ok(p) => {
                 // the state the page does not pin keeps its default, so the program still has a WGSL form
                 let mut full = self.default_pins();
                 for (r, lanes) in &pins.state {
@@ -293,13 +234,12 @@ impl Shader {
                 full.words.clone_from(&pins.words);
                 Some(p.specialise(&full, &self.default_pins()))
             }
-            _ => None,
+            Err(_) => None,
         }
     }
 
     /// This vertex program's WGSL written for `consumer`, the pixel program it feeds, against the WGSL the consumer's
     /// report shows: its outputs where the consumer reads them, its resources after the consumer's in each bind group.
-    /// Each program is written on the path its report shows (the IR where it lifts there).
     pub fn linked(&self, consumer: &Shader) -> Result<Linked, String> {
         let stages = (self.stage(), consumer.stage());
         if !matches!(stages, (Some(Stage::Vertex), Some(Stage::Pixel))) {
@@ -317,56 +257,39 @@ impl Shader {
             );
         }
         // the consumer as its report shows it: its interface and the bindings of its WGSL
-        let (read, taken) = match (&consumer.ir, &consumer.naga) {
-            (Some(Ok(ps)), _) => {
-                let shown = ps.prepared(&consumer.default_pins().known_state())?;
-                let taken = ps.wgsl(&shown)?.bindings;
-                (shown.interface, taken)
-            }
-            (None, Some(Ok(ps))) => (ps.interface().clone(), ps.wgsl()?.bindings),
-            (Some(Err(r)), _) => return Err(format!("a program of the pair did not lift: {r}")),
-            (None, Some(Err(e))) => return Err(format!("a program of the pair did not lift: {e}")),
-            (None, None) => return Err("the pixel program did not lift".to_owned()),
-        };
-        match (&self.ir, &self.naga) {
-            (Some(Ok(vs)), _) => {
-                let p = vs.prepared(&self.default_pins().known_state())?;
-                vs.linked(&p, &read, &taken)
-            }
-            (None, Some(Ok(vs))) => vs.linked(&read, &taken),
-            (Some(Err(r)), _) => Err(format!("a program of the pair did not lift: {r}")),
-            (None, Some(Err(e))) => Err(format!("a program of the pair did not lift: {e}")),
-            (None, None) => Err("the vertex program did not lift".to_owned()),
-        }
+        let (ps, shown) = consumer.shown()?;
+        let taken = ps.wgsl(&shown)?.bindings;
+        let (vs, p) = self.shown()?;
+        vs.linked(&p, &shown.interface, &taken)
+    }
+
+    /// The lift and the program its report shows, prepared with the default state.
+    fn shown(&self) -> Result<(&IrProgram, iridia_ir::Program), String> {
+        let ir = self
+            .ir
+            .as_ref()
+            .map_err(|r| format!("a program of the pair did not lift: {r}"))?;
+        Ok((ir, ir.prepared(&self.default_pins().known_state())?))
     }
 
     /// The stage of the program shown, where it lifted.
     fn stage(&self) -> Option<Stage> {
-        match (&self.ir, &self.naga) {
-            (Some(Ok(p)), _) => Some(p.interface().stage),
-            (_, Some(Ok(n))) => Some(n.interface().stage),
-            _ => None,
-        }
+        self.ir.as_ref().ok().map(|p| p.interface().stage)
     }
 
     /// Run the program on every CPU executor that can.
     pub fn executions(&self, request: &Request) -> Vec<Executed> {
-        let mut out = Vec::new();
-        if let Some(Ok(p)) = &self.ir {
-            let mut request = request.clone();
-            // the GPU runs the program with the default state where the page pins none
-            for s in self.state() {
-                if !request.state.iter().any(|(r, _)| *r == s.resource) {
-                    request.state.push((s.resource, s.default));
-                }
+        let Ok(p) = &self.ir else {
+            return Vec::new();
+        };
+        let mut request = request.clone();
+        // the GPU runs the program with the default state where the page pins none
+        for s in self.state() {
+            if !request.state.iter().any(|(r, _)| *r == s.resource) {
+                request.state.push((s.resource, s.default));
             }
-            out.extend(p.execute(&request, &self.textures));
-        } else if let Some(Ok(n)) = &self.naga
-            && n.runs()
-        {
-            out.push(n.execute(request, &self.textures));
         }
-        out
+        p.execute(&request, &self.textures)
     }
 }
 

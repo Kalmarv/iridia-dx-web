@@ -1,7 +1,8 @@
-//! iridia's public pipeline on its own IR: read and lift, specialise pipeline state, promote and simplify, validate,
-//! write WGSL through stock naga, and run on the CPU with `iridia-exec-ir` and, compiled, with `iridia-exec`.
+//! iridia's public pipeline on its own IR: read and lift, specialise pipeline state, structurize, promote, simplify
+//! and break flags, validate, write WGSL through stock naga, and run on the CPU with `iridia-exec-ir` and, compiled,
+//! with `iridia-exec`.
 //!
-//! Direct3D 9 and DXBC programs take this path; DXIL joins it when its reader lifts into the IR (see `legacy`).
+//! Direct3D 9, DXBC and DXIL programs take this path.
 
 use iridia_ir::interface::{Interface, ResourceId, ResourceKind, Stage};
 
@@ -35,6 +36,14 @@ impl IrProgram {
         })
     }
 
+    /// Lift a DXIL container's program. Its values' origins are bits of the bitcode, which the listing is not tied to.
+    pub fn dxil(bytes: &[u8]) -> Result<IrProgram, iridia_ir::Refusal> {
+        Ok(IrProgram {
+            lifted: iridia_dxil::ir::lift(bytes)?,
+            code_base: 0,
+        })
+    }
+
     /// The interface the lift states.
     pub fn interface(&self) -> &Interface {
         &self.lifted.interface
@@ -64,8 +73,14 @@ impl IrProgram {
         if !state.is_empty() {
             iridia_passes::specialise(&mut p, state).map_err(|e| format!("specialise: {e}"))?;
         }
-        iridia_passes::promote(&mut p.entry).map_err(|e| format!("promote: {e}"))?;
-        iridia_passes::simplify(&mut p.entry);
+        // a DXIL lift's body is a control flow graph: structurize gives it WGSL's structured flow (a structured body is
+        // left as it is), and break_flags turns its exits into the flags both the WGSL writer and iridia-exec take
+        for f in std::iter::once(&mut p.entry).chain(p.patch.as_mut()) {
+            iridia_passes::structurize(f).map_err(|e| format!("structurize: {e}"))?;
+            iridia_passes::promote(f).map_err(|e| format!("promote: {e}"))?;
+            iridia_passes::simplify(f);
+            iridia_passes::break_flags(f).map_err(|e| format!("break_flags: {e}"))?;
+        }
         if let Err(problems) = iridia_ir::validate(&p) {
             let first = problems.first().map(ToString::to_string).unwrap_or_default();
             return Err(format!("the IR does not validate: {first}"));
@@ -146,7 +161,6 @@ impl IrProgram {
             .map(io_of)
             .collect();
         Ok(Linked {
-            path: "ir",
             wgsl: Wgsl {
                 text: written.text,
                 bindings,
@@ -221,11 +235,9 @@ impl IrProgram {
             .collect()
     }
 
-    /// `p` compiled by `iridia-exec`, its exits as `break_flags` leaves them.
+    /// A prepared program compiled by `iridia-exec`.
     fn compiled(&self, p: &iridia_ir::Program) -> Result<iridia_exec::ProgramShader, String> {
-        let mut p = p.clone();
-        iridia_passes::break_flags(&mut p.entry).map_err(|e| format!("break_flags: {e}"))?;
-        iridia_exec::ProgramShader::from_ir(p).map_err(|e| e.to_string())
+        iridia_exec::ProgramShader::from_ir(p.clone()).map_err(|e| e.to_string())
     }
 
     fn run_compiled(&self, request: &Request, textures: &Textures) -> Result<Vec<LaneResult>, String> {

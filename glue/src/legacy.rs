@@ -1,20 +1,17 @@
 //! The old path, in one place: what the page does not have on the IR yet.
 //!
-//! DXBC and DXIL lift into naga modules here (`iridia-dxbc`, `iridia-dxil`). For DXBC the IR lift is the program shown
-//! and run, and this module gives only the analyses (what reaches each output lane, how a constant buffer holds a
-//! matrix) and the specialisation of constant words; for DXIL it gives everything, the `iridia-exec` run of the module
-//! included. When the IR has its own analyses and constant folding and DXIL lifts onto
-//! it, this module is deleted: `tests/legacy.rs` fails once it is gone, as a reminder to make that test the check that
-//! it stays gone.
+//! DXBC and DXIL lift into naga modules here (`iridia-dxbc`, `iridia-dxil`) for what the IR does not give yet: the
+//! analyses (what reaches each output lane, how a constant buffer holds a matrix) and the specialisation of constant
+//! words. The IR lift is the program shown and run; the module's `iridia-exec` run stays as the tests' reference. When
+//! the IR has its own analyses and constant folding, this module is deleted: `tests/legacy.rs` fails once it is gone,
+//! as a reminder to make that test the check that it stays gone.
 
 use iridia::flow::{Flow, Via};
-use iridia::{ConstantType, IoType, Program, ResourceId, ResourceKind, Stage};
+use iridia::{ConstantType, Program, ResourceId, ResourceKind};
 use serde::Serialize;
 
 use crate::sampling::Textures;
-use crate::view::{
-    self, Binding, Executed, Io, LaneResult, Lifted, Linked, Pins, Request, Specialised, Wgsl,
-};
+use crate::view::{Executed, LaneResult, Lifted, Pins, Request, Specialised};
 
 /// A program lifted into a naga module.
 #[derive(Debug)]
@@ -95,93 +92,12 @@ impl NagaProgram {
         })
     }
 
-    /// The interface the lift states.
-    pub fn interface(&self) -> &iridia::Interface {
-        &self.program.interface
-    }
-
-    /// The source's target name.
-    pub fn target(&self) -> &str {
-        &self.program.provenance.target
-    }
-
-    /// The lifter and its version.
-    pub fn lifter(&self) -> String {
-        format!(
-            "{} {}",
-            self.program.provenance.lifter, self.program.provenance.lifter_version
-        )
-    }
-
-    /// What the lifter noted.
-    pub fn notes(&self) -> &[String] {
-        &self.program.notes
-    }
-
     /// The program's stable text: its interface header, then the module.
-    pub fn text(&self) -> Result<Lifted, String> {
+    fn text(&self) -> Result<Lifted, String> {
         Ok(Lifted {
             kind: "legacy",
             text: self.program.text().map_err(|e| e.to_string())?,
             origins: Vec::new(),
-        })
-    }
-
-    /// The program as WGSL, with its bindings and entry point.
-    pub fn wgsl(&self) -> Result<Wgsl, String> {
-        wgsl_of(&self.program)
-    }
-
-    /// The vertex program as WGSL for the pixel program of interface `consumer`, whose WGSL binds `taken`: through
-    /// `iridia::emit::wgsl_for`, the outputs at the consumer's locations and types, the resources after the
-    /// consumer's.
-    pub fn linked(&self, consumer: &iridia::Interface, taken: &[Binding]) -> Result<Linked, String> {
-        let own = wgsl_of(&self.program)?;
-        let bindings = own
-            .bindings
-            .iter()
-            .map(|b| {
-                (
-                    ResourceId(b.resource),
-                    (b.group, view::after(taken, b.group, b.binding)),
-                )
-            })
-            .collect();
-        let pipeline = iridia::emit::Pipeline {
-            bindings,
-            feeds: Some(consumer),
-            ..Default::default()
-        };
-        let written = iridia::emit::wgsl_for(&self.program, &pipeline).map_err(|e| e.to_string())?;
-        let read = iridia::entry_io(consumer)?;
-        let outputs = own
-            .outputs
-            .into_iter()
-            .filter(|o| o.builtin.is_some())
-            .chain(
-                read.arguments
-                    .iter()
-                    .filter_map(io_of)
-                    .filter(|a| a.location.is_some()),
-            )
-            .collect();
-        Ok(Linked {
-            path: "legacy",
-            wgsl: Wgsl {
-                text: written.text,
-                bindings: written
-                    .bindings
-                    .iter()
-                    .map(|(id, (group, binding))| Binding {
-                        resource: id.0,
-                        group: *group,
-                        binding: *binding,
-                    })
-                    .collect(),
-                inputs: own.inputs,
-                outputs,
-            },
-            notes: written.notes,
         })
     }
 
@@ -308,7 +224,8 @@ impl NagaProgram {
         }
     }
 
-    /// Run the program with `iridia-exec` for `request`: one invocation, or a quad.
+    /// Run the program with `iridia-exec` for `request`: one invocation, or a quad. The page runs the IR; the tests
+    /// compare the IR's runs with this one.
     pub fn execute(&self, request: &Request, textures: &Textures) -> Executed {
         Executed {
             executor: "iridia-exec",
@@ -326,16 +243,6 @@ impl NagaProgram {
             request,
             textures,
         )
-    }
-
-    /// Whether `iridia-exec` runs the program: it runs pixel and vertex programs.
-    pub fn runs(&self) -> bool {
-        matches!(self.program.stage, Stage::Pixel | Stage::Vertex)
-    }
-
-    /// Whether a run of the program must be a quad's.
-    pub fn needs_quad(&self) -> bool {
-        iridia_exec::ProgramShader::new(self.program.clone()).is_ok_and(|s| s.needs_quad())
     }
 }
 
@@ -376,92 +283,4 @@ fn sources_of(r: &iridia::flow::Reach, interface: &iridia::Interface) -> Vec<Sou
             }),
     );
     sources
-}
-
-/// A naga-path program as WGSL, with each resource's binding from the module's globals.
-fn wgsl_of(program: &Program) -> Result<Wgsl, String> {
-    let text = iridia::emit::wgsl(program).map_err(|e| e.to_string())?;
-    let bindings = program
-        .bindings
-        .iter()
-        .filter_map(|(id, g)| {
-            let b = program
-                .module
-                .global_variables
-                .try_get(*g)
-                .ok()?
-                .binding
-                .as_ref()?;
-            Some(Binding {
-                resource: id.0,
-                group: b.group,
-                binding: b.binding,
-            })
-        })
-        .collect();
-    let io = iridia::entry_io(&program.interface)?;
-    let items = |list: &[iridia::IoItem]| -> Vec<Io> { list.iter().filter_map(io_of).collect() };
-    Ok(Wgsl {
-        text,
-        bindings,
-        inputs: items(&io.arguments),
-        outputs: items(&io.results),
-    })
-}
-
-fn io_of(item: &iridia::IoItem) -> Option<Io> {
-    let IoType::Value(value) = item.ty else {
-        return None;
-    };
-    let (location, builtin, interpolation, sampling) = match &item.binding {
-        naga::Binding::BuiltIn(b) => (None, Some(builtin_name(b)), None, None),
-        naga::Binding::Location {
-            location,
-            interpolation,
-            sampling,
-            ..
-        } => (
-            Some(*location),
-            None,
-            interpolation.map(|i| match i {
-                naga::Interpolation::Linear => "linear",
-                naga::Interpolation::Flat => "flat",
-                _ => "perspective",
-            }),
-            sampling.and_then(|s| match s {
-                naga::Sampling::Centroid => Some("centroid"),
-                naga::Sampling::Sample => Some("sample"),
-                _ => None,
-            }),
-        ),
-    };
-    Some(Io {
-        name: item.name.clone(),
-        varying: *item.varyings.first()?,
-        location,
-        builtin,
-        scalar: value.scalar,
-        width: value.width,
-        interpolation,
-        sampling,
-    })
-}
-
-fn builtin_name(b: &naga::BuiltIn) -> &'static str {
-    match b {
-        naga::BuiltIn::Position { .. } => "position",
-        naga::BuiltIn::FrontFacing => "front_facing",
-        naga::BuiltIn::VertexIndex => "vertex_index",
-        naga::BuiltIn::InstanceIndex => "instance_index",
-        naga::BuiltIn::SampleIndex => "sample_index",
-        naga::BuiltIn::SampleMask => "sample_mask",
-        naga::BuiltIn::FragDepth => "frag_depth",
-        naga::BuiltIn::PrimitiveIndex => "primitive_index",
-        naga::BuiltIn::GlobalInvocationId => "global_invocation_id",
-        naga::BuiltIn::LocalInvocationId => "local_invocation_id",
-        naga::BuiltIn::LocalInvocationIndex => "local_invocation_index",
-        naga::BuiltIn::WorkGroupId => "workgroup_id",
-        naga::BuiltIn::NumWorkGroups => "num_workgroups",
-        _ => "unknown",
-    }
 }

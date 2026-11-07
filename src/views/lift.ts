@@ -31,7 +31,15 @@ export function liftView(report: Report, lifted: Lifted | null, wgsl: string | n
   const listing = 'Ok' in bc.listing ? bc.listing.Ok.split('\n') : [];
   const origin = new Map(lifted?.origins ?? []);
   const instructionOf = (byte: number) => bc.instructions.find((i) => byte >= i.start && byte < i.end);
-  const strip = h('div.origin-strip', lifted?.kind === 'ir' ? 'Click a line of the IR: its source instruction shows here, and every line it became is marked.' : '');
+  const tied = lifted?.kind === 'ir' && origin.size > 0;
+  const strip = h(
+    'div.origin-strip',
+    tied
+      ? 'Click a line of the IR: its source instruction shows here, and every line it became is marked.'
+      : lifted?.kind === 'ir' && report.format === 'dxil'
+        ? "DXIL's listing is LLVM text, not tied to positions in the bitcode, so the IR's lines do not lead to it."
+        : '',
+  );
   const defs = lifted ? definitions(lifted.text) : new Map<number, number>();
   const names = wgsl ? wgslNames(wgsl) : new Map<number, number>();
   const valueOfLine = new Map([...defs].map(([v, l]) => [l, v]));
@@ -77,7 +85,7 @@ export function liftView(report: Report, lifted: Lifted | null, wgsl: string | n
       : 'This lift keeps no source words, so neither side is tied to the bytecode.';
   return h(
     'div.lift',
-    h('div.lift-head', h('span', `${title}: ${lifted?.kind === 'ir' ? "iridia's IR, after specialise, promote and simplify" : 'the module iridia lifted, as text'}`), h('span.dim', tie)),
+    h('div.lift-head', h('span', `${title}: ${lifted?.kind === 'ir' ? "iridia's IR, after specialise, structurize, promote, simplify and break_flags" : 'the module iridia lifted, as text'}`), h('span.dim', tie)),
     lifted?.kind === 'ir' ? strip : null,
     h('div.split', h('div.col', h('h3', lifted?.kind === 'ir' ? 'IR' : 'Program'), left), h('div.col', h('h3', 'WGSL'), right)),
   );

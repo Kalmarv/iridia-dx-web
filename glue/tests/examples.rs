@@ -110,16 +110,14 @@ fn every_example_lifts_to_wgsl() {
                 "{name}: {code:?}"
             );
         }
-        // Direct3D 9 and DXBC programs are on the IR, a vertex or pixel program run by its interpreter and by
-        // iridia-exec compiled from it
-        if report.format != Format::Dxil {
-            assert_eq!(report.path, "ir", "{name}");
-            if !compute {
-                assert_eq!(report.executors, ["iridia-exec-ir", "iridia-exec"], "{name}");
-            }
+        // every program is on the IR, a vertex or pixel program run by its interpreter and by iridia-exec compiled
+        // from it
+        assert_eq!(report.lifted.as_ref().unwrap().kind, "ir", "{name}");
+        if !compute {
+            assert_eq!(report.executors, ["iridia-exec-ir", "iridia-exec"], "{name}");
         }
-        // the IR's lines are tied to the source instructions they came from
-        if report.path == "ir" {
+        // the IR's lines are tied to the source instructions they came from, where the listing is tied to bytes
+        if report.format != Format::Dxil {
             assert!(!report.lifted.unwrap().origins.is_empty(), "{name}");
         }
     }
@@ -165,7 +163,6 @@ fn the_direct3d_9_pair_links_where_the_pixel_program_reads() {
     let (vs, ps) = (open(&dir.join("d3d9-pair.vso")), open(&dir.join("d3d9-pair.pso")));
     let shown = ps.report().wgsl.unwrap();
     let linked = vs.linked(&ps).unwrap();
-    assert_eq!(linked.path, "ir");
     let read = locations(&shown.text);
     let passed = locations(&linked.wgsl.text);
     assert!(!read.is_empty());
@@ -271,8 +268,8 @@ fn the_plasma_colours_default_to_its_palette() {
 /// The CPU executors on each example on the IR, on a quad of inputs spread over [-1, 1] with the constants' defaults (0.5
 /// where a word has none) and a
 /// gradient in each texture slot: `iridia-exec-ir` (the IR's interpreter), `iridia-exec` (compiled from the IR) and,
-/// for DXBC, `iridia-exec` on the old lift give the same bits (any NaN for a NaN), and the outputs vary by lane, so
-/// that agreement is not that of constant results.
+/// for DXBC and DXIL, `iridia-exec` on the old naga-module lift give the same bits (any NaN for a NaN), and the outputs
+/// vary by lane, so that agreement is not that of constant results.
 #[test]
 fn the_cpu_executors_agree_on_every_example_on_the_ir() {
     let mut checked = 0;
@@ -282,7 +279,7 @@ fn the_cpu_executors_agree_on_every_example_on_the_ir() {
         let mut shader = open(&path);
         let report = shader.report();
         // a compute program (julia) has no CPU run on the page: its GPU run is checked by scripts/variants.mjs
-        if report.path != "ir" || report.executors.is_empty() {
+        if report.executors.is_empty() {
             continue;
         }
         let interface = report.interface.as_ref().unwrap();
@@ -336,12 +333,13 @@ fn the_cpu_executors_agree_on_every_example_on_the_ir() {
             );
         }
         let mut runs = shader.executions(&request);
-        if report.format == Format::Dxbc {
-            runs.push(
-                iridia_web::legacy::NagaProgram::dxbc(&bytes)
-                    .unwrap()
-                    .execute(&request, &textures),
-            );
+        let old = match report.format {
+            Format::Dxbc => Some(iridia_web::legacy::NagaProgram::dxbc(&bytes)),
+            Format::Dxil => Some(iridia_web::legacy::NagaProgram::dxil(&bytes)),
+            Format::D3d9 => None,
+        };
+        if let Some(old) = old {
+            runs.push(old.unwrap().execute(&request, &textures));
         }
         let results: Vec<(String, Vec<iridia_web::view::LaneResult>)> = runs
             .into_iter()
@@ -354,7 +352,7 @@ fn the_cpu_executors_agree_on_every_example_on_the_ir() {
             .collect();
         assert_eq!(
             results.len(),
-            if report.format == Format::Dxbc { 3 } else { 2 },
+            if report.format == Format::D3d9 { 2 } else { 3 },
             "{name}"
         );
         let words = |lanes: &[iridia_web::view::LaneResult]| -> Vec<Option<[u32; 4]>> {
@@ -392,5 +390,5 @@ fn the_cpu_executors_agree_on_every_example_on_the_ir() {
         checked += 1;
     }
     // plasma, lit-brick, bloom, the pair's two programs, toon, water
-    assert_eq!(checked, 7);
+    assert_eq!(checked, 9);
 }

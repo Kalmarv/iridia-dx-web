@@ -99,7 +99,6 @@ export interface Report {
   size: number;
   target: string | null;
   lifter: string | null;
-  path: 'ir' | 'legacy';
   bytecode: Bytecode;
   interface: Interface | null;
   refusal: { message: string; byte: number | null } | null;
@@ -133,4 +132,4 @@ export interface Request {
 export interface LaneResult { outputs: ([number, number, number, number] | null)[]; killed: boolean }
 export interface Executed { executor: string; runs: string; lanes: Result<LaneResult[]> }
 
-export interface Linked { path: string; wgsl: Wgsl; notes: string[] }
+export interface Linked { wgsl: Wgsl; notes: string[] }
