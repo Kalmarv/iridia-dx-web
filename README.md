@@ -71,7 +71,7 @@ The Coverage route is built in only where `coverage/coverage.json` (iridia's cov
   readers from crates.io, lifts it through iridia's crates (from one commit of iridia's main branch) and gives the
   page JSON reports. `ir.rs` is the IR path: Direct3D 9 and DXBC programs lift onto iridia's IR, which gives the
   Lift view, the WGSL and the CPU runs (`iridia-exec-ir` interprets the IR, `iridia-exec` compiles it; `exec.rs` is the
-  register view they share). `legacy.rs` holds what is not on the IR yet: DXIL and DXBC compute programs, and the
+  register view they share). `legacy.rs` holds what is not on the IR yet: DXIL programs, and the
   Flow analyses and constant folding of DXBC and DXIL programs. It is deleted in one piece once those move
   (`tests/legacy.rs` is expected to fail until it is).
 - `glue/tests/refused/` holds a program iridia refuses (not an example), for the tests of how a refusal reads.
