@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 name = "iridia"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "iridia-interface",
  "iridia-ir",
@@ -255,7 +255,7 @@ dependencies = [
 [[package]]
 name = "iridia-d3d9-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "d3d9-reader 0.5.2",
  "iridia-ir",
@@ -264,7 +264,7 @@ dependencies = [
 [[package]]
 name = "iridia-dxbc"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "dxbc-reader 0.5.2",
  "dxcontainer 0.5.2",
@@ -276,7 +276,7 @@ dependencies = [
 [[package]]
 name = "iridia-dxil"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "dxcontainer 0.5.2",
  "dxil-reader 0.5.2",
@@ -288,7 +288,7 @@ dependencies = [
 [[package]]
 name = "iridia-exec"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "half",
  "iridia",
@@ -303,7 +303,7 @@ dependencies = [
 [[package]]
 name = "iridia-exec-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "iridia-ir",
 ]
@@ -311,7 +311,7 @@ dependencies = [
 [[package]]
 name = "iridia-interface"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "iridia-ir",
  "serde",
@@ -320,7 +320,7 @@ dependencies = [
 [[package]]
 name = "iridia-ir"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "serde",
  "serde_json",
@@ -330,7 +330,7 @@ dependencies = [
 [[package]]
 name = "iridia-naga"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "iridia-ir",
  "naga",
@@ -339,7 +339,7 @@ dependencies = [
 [[package]]
 name = "iridia-passes"
 version = "0.5.0"
-source = "git+https://github.com/Kalmarv/iridia?rev=708f6d27e1e869d5abe0581ac750d97670c01b9f#708f6d27e1e869d5abe0581ac750d97670c01b9f"
+source = "git+https://github.com/Kalmarv/iridia?rev=cc434424ef175d5fcc9d04f421bb3db5f9dfe52c#cc434424ef175d5fcc9d04f421bb3db5f9dfe52c"
 dependencies = [
  "iridia-ir",
 ]
